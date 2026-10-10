@@ -12,11 +12,31 @@ Build a responsive Netflix-style movie and series streaming website using real c
 
 ## The five phases
 
-- Phase 0 — Foundation: documentation, git, minimal React+Vite client and Node+Express server, health-check endpoint, verified dev setup. (current phase)
-- Phase 1 — Dynamic content engine: parse the CSX manifest, port real provider logic (search + discovery) from actual extension sources, make real HTTP requests with required headers, optional TMDB metadata enrichment.
+- Phase 0 — Foundation: documentation, git, minimal React+Vite client and Node+Express server, health-check endpoint, verified dev setup. (complete)
+- Phase 1 — Dynamic content engine: parse the CSX manifest, port real provider logic (search + discovery) from actual extension sources, make real HTTP requests with required headers, optional TMDB metadata enrichment. (current phase)
 - Phase 2 — Netflix-style responsive UI: homepage rows and a same-page movie/series details modal with seasons and episodes, rendered exclusively from real Phase 1 data.
 - Phase 3 — Playback: real provider stream resolution, server-side FFmpeg → HLS, hls.js player with audio-track switching, subtitles, seeking, and fullscreen.
 - Phase 4 — Reliability: provider fallback, caching, Hindi/English provider optimization, responsive polish.
+
+## Phase 1 delivery (implemented)
+
+- Provider abstraction: `packages/server/src/providers/base.js` (`BaseProvider` with fetch/timeout/UA, `ProviderError` with codes `timeout`/`network`/`http`/`parse`/`unsupported`), `providers/index.js` registry.
+- Implemented provider: CineStream — a faithful port of `CineStreamProvider.kt` (main API only, no extractors yet). Real endpoints:
+  - Home catalogs: `https://cinemeta-catalogs.strem.io/top/catalog/{movie|series}/top/skip={n}[&genre={G}].json` (ranked by the provider's own popularity metric; `.json` goes at the very end)
+  - Search: `https://v3-cinemeta.strem.io/catalog/{movie|series}/top/search={q}.json` + `https://anime-kitsu.strem.fun/catalog/anime/kitsu-anime-airing/search={q}.json`
+  - Detail: `https://v3-cinemeta.strem.io/meta/{type}/{id}.json` (`getDetails` implemented in the provider layer, not yet routed)
+  - Posters from `metahub.space`/`kitsu.` are proxied via `https://wsrv.nl/?url=`
+  - Title = first truthy alias ?? name; type = movie/series; year parsed from `year` or `releaseInfo`; rating from `imdbRating` (empty → null)
+- Normalized title schema: `{ id, title, type, poster, backdrop, overview, year, releaseInfo, genres, rating, popularity, source, sourceUrl }`; missing fields stay `null`, never invented.
+- API routes (server-side provider traffic only; the client never calls providers directly):
+  - `GET /api/home/trending` — top movie catalog (popularity-ranked)
+  - `GET /api/home/latest` — top movie catalog sorted by release year descending (documented in the `ranking` field; the provider has no dedicated latest catalog)
+  - `GET /api/home/popular-series` — top series catalog (popularity-ranked)
+  - `GET /api/search?q=...` — validated (400 on short/missing/control-char queries)
+  - All routes: 5-minute TTL in-memory cache, stale-cache fallback on upstream failure, provider errors mapped to 502/504, no internal details leaked.
+- TMDB enrichment (`providers/tmdb.js`): optional, server-side, conservative title+year+type match (±1 year), cached 24h, disabled with `no_tmdb_key` when `TMDB_API_KEY` is absent. The key never leaves the server.
+- The CineStream extension also registers CineSimkl (needs a SIMKL client ID compiled into the .cs3 — unavailable) and CineTmdb (key-based; superseded by our optional enrichment). Other CSX providers (Bollyflix, MoviesDrive, Moviesmod, VegaMovies) are Phase 4 work.
+- Client: minimal dev view consuming `/api/home/*` and `/api/search` with loading/error/empty states (Phase 2 builds the full UI).
 
 ## Playback pipeline (Phase 3 integration plan — documented now, not implemented)
 
@@ -39,4 +59,4 @@ Flow: provider resolves a real media URL (mkv/mp4/m3u8) plus required headers �
 
 ## Status
 
-Detailed current status, test evidence, and the next task live in `PROGRESS.md`.
+Phase 1 is implemented and verified (see `PROGRESS.md` for test evidence). Next: Phase 2 homepage + details modal.
