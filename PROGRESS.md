@@ -2,7 +2,7 @@
 
 ## Current status
 
-- Current phase: Phase 1 - Dynamic Content Engine
+- Current phase: Phase 2 - Netflix-style Responsive UI
 - Overall state: Complete
 
 ## Task log
@@ -106,9 +106,33 @@
 - Files changed: provider abstraction, CineStream adapter, TMDB enricher, API routes, frontend App, tests.
 - Next task: Begin Phase 2 - Netflix-style responsive homepage and detail modal.
 
+### 2026-10-10 - Phase 2: Netflix-style Responsive UI
+
+- Changed files:
+  - `packages/client/src/App.jsx` — rebuilt with component architecture, view routing (home/movies/series/search), loading/error/empty states.
+  - `packages/client/src/index.css` — full CSS design system with CSS variables, responsive breakpoints (480px, 768px), reduced-motion support.
+  - `packages/client/src/components/Navbar.jsx` — sticky transparent→solid navbar, search toggle with slide-in input, keyboard Escape-to-close.
+  - `packages/client/src/components/Hero.jsx` — cinematic hero banner using first trending item, backdrop, title, overview, Play/More Info actions.
+  - `packages/client/src/components/Row.jsx` — horizontal scroll row with left/right arrow buttons, skeleton loading state, empty state.
+  - `packages/client/src/components/TitleCard.jsx` — poster card with hover overlay showing play icon, rating, type badge; keyboard accessible.
+  - `packages/client/src/components/DetailModal.jsx` — animated overlay modal; fetches `/api/detail/:id`; shows backdrop, poster, title, genres, rating, overview; season select + episode list for series; Escape-to-close, focus trap, scroll lock; "Play" button disabled with Phase 3 notice.
+- Commands run: `npm run build`, `npm run health-check`.
+- Build: client Vite build succeeded (156 kB JS, 14.47 kB CSS gzipped).
+- Backend tests: **9/9 passed** (no regression from Phase 1).
+- Verified: UI components consume real API data only; no mock titles or fabricated results; Play button visibly disabled with explanation.
+- Known issues: Cinemeta genre 404s are pre-existing and handled; no new issues.
+- Next task: Begin Phase 3 — real provider stream resolution and FFmpeg/HLS playback.
+
+### 2026-10-10 - Git checkpoint for Phase 2
+
+- Commands run: `git add -A`, `git commit`.
+- Commit: Phase 2 Netflix-style UI.
+- Next task: Phase 3 — stream resolution, FFprobe probing, FFmpeg HLS pipeline, hls.js player.
+
 ## Limitations & Blockers
 
 - **CineStream genre catalogs**: Action, Comedy, Drama catalogs return 404 on Cinemeta. Only top-level movie/series and anime catalogs work. This is a provider-side limitation, not a code issue.
 - **TMDB enrichment**: Disabled by default (requires `TMDB_API_KEY` in `.env`). Enrichment is best-effort and non-blocking.
-- **Stream resolution**: Not implemented (Phase 3). Provider extractors use Cloudflare-bypass, Android WebView cookies, and complex decryption - not portable to Node.js without significant work.
+- **Stream resolution**: Not implemented (Phase 3). Provider extractors use Cloudflare-bypass, Android WebView cookies, and complex decryption — not directly portable to Node.js.
 - **Provider fallback**: Only CineStream implemented. Phase 4 will add fallback and Hindi/English optimization.
+- **Play button**: Intentionally disabled in Phase 2 with a "Phase 3" notice. No playback is claimed or simulated.
