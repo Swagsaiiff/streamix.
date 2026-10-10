@@ -42,6 +42,27 @@ export function normalizeMeta(meta) {
   };
 }
 
+export function normalizeDetail(meta) {
+  const base = normalizeMeta(meta);
+  if (base.type === "movie") {
+    return { ...base, episodes: null };
+  }
+  const episodes = (meta.videos ?? [])
+    .filter((ep) => ep.season != null && ep.season !== 0)
+    .map((ep) => ({
+      id: ep.id ?? null,
+      season: ep.season ?? null,
+      episode: ep.episode ?? ep.number ?? null,
+      name: ep.name ?? ep.title ?? null,
+      overview: ep.overview ?? ep.description ?? null,
+      thumbnail: getPosterUrl(ep.thumbnail),
+      firstAired: ep.firstAired ?? ep.released ?? null,
+      rating: Number.parseFloat(ep.rating) || null
+    }))
+    .sort((a, b) => a.season - b.season || a.episode - b.episode);
+  return { ...base, episodes };
+}
+
 export class CineStreamProvider extends BaseProvider {
   constructor(options = {}) {
     super({ name: "CineStream", timeoutMs: 15000, ...options });
@@ -122,6 +143,6 @@ export class CineStreamProvider extends BaseProvider {
     const data = await this.fetchJson(`${base}/meta/${toType(type)}/${rawId}.json`);
     const meta = data?.meta;
     if (!meta) throw new ProviderError(`no meta found for ${type}/${id}`, "parse");
-    return normalizeMeta(meta);
+    return normalizeDetail(meta);
   }
 }

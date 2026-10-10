@@ -1,15 +1,27 @@
-import { useEffect, useState, useCallback } from "react";
-import { fetchHomeSections, fetchSearch } from "./api.js";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { fetchHomeSections, fetchSearch, fetchDetail } from "./api.js";
+import Navbar from "./components/Navbar.jsx";
+import Hero from "./components/Hero.jsx";
 import Row from "./components/Row.jsx";
+import SkeletonRow from "./components/SkeletonRow.jsx";
+import DetailModal from "./components/DetailModal.jsx";
 import SearchBox from "./components/SearchBox.jsx";
+
+const VIEWS = ["home", "movies", "series", "search"];
 
 export default function App() {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [errors, setErrors] = useState([]);
+  const [sectionErrors, setSectionErrors] = useState([]);
+  const [view, setView] = useState("home");
+  const [heroItem, setHeroItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState(null);
   const [searchState, setSearchState] = useState("idle");
+  const [modal, setModal] = useState(null);
+  const detailCacheRef = useRef(new Map());
+  const searchControllerRef = useRef(null);
+  const detailControllerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -17,11 +29,13 @@ export default function App() {
     fetchHomeSections().then((results) => {
       if (cancelled) return;
       const ok = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
-      const failed = results
-        .filter((r) => r.status === "rejected")
-        .map((r) => r.reason.message);
+      const failed = results.filter((r) => r.status === "rejected").map((r) => r.reason.message);
       setSections(ok);
-      setErrors(failed);
+      setSectionErrors(failed);
+      const trending = ok.find((s) => s.data.key === "trending");
+      const candidate =
+        trending?.data.items.find((i) => i.backdrop) ?? trending?.data.items[0] ?? null;
+      setHeroItem(candidate ?? null);
       setLoading(false);
     });
     return () => {
@@ -29,66 +43,168 @@ export default function App() {
     };
   }, []);
 
-  const handleSearch = useCallback(async (q) => {
-    const trimmed = q.trim();
-    if (trimmed.length < 2) return;
-    setSearchQuery(trimmed);
-    setSearchState("loading");
-    try {
-      const result = await fetchSearch(trimmed);
-      setSearchResult(result);
-      setSearchState("done");
-    } catch {
-      setSearchState("error");
-    }
-  }, []);
+  const handleSearch = useCallback(
+    async (q) => {
+      const trimmed = q.trim();
+      if (trimmed.length < 2) return;
+      setSearchQuery(trimmed);
+      setSearchState("loading");
+      if (searchControllerRef.current) {
+        searchControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      searchControllerRef.current = controller;
+      try {
+        const result = await fetchSearch(trimmed, controller.signal);
+        setSearchResult(result);
+        setSearchState("done");
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        setSearchState("error");
+      }
+    },
+    [searchControllerRef]
+  );
 
   const clearSearch = useCallback(() => {
+    if (searchControllerRef.current) {
+      searchControllerRef.current.abort();
+    }
     setSearchQuery("");
     setSearchResult(null);
     setSearchState("idle");
   }, []);
 
+  const openDetail = useCallback(
+    async (item) => {
+      const key = `${item.type}:${item.id}`;
+      const cached = detailCacheRef.current.get(key);
+      if (cached) {
+        setModal({ item, detail: cached, state: "done" });
+        return;
+      }
+      if (detailControllerRef.current) {
+        detailControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      detailControllerRef.current = controller;
+      setModal({ item, detail: null, state: "loading" });
+      try {
+        const data = await fetchDetail(item.type, item.id, controller.signal);
+        detailCacheRef.current.set(key, data.item);
+        setModal({ item, detail: data.item, state: "done" });
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        setModal({ item, detail: null, state: "error" });
+      }
+    },
+    [detailCacheRef, detailControllerRef]
+  );
+
+  const closeModal = useCallback(() => {
+    if (detailControllerRef.current) {
+      detailControllerRef.current.abort();
+    }
+    setModal(null);
+  }, [detailControllerRef]);
+
+  const visibleItems = useMemo(() => {
+    if (view === "home") return [];
+    const all = sections.flatMap((s) => s.data.items);
+    if (view === "movies") return all.filter((i) => i.type === "movie");
+    if (view === "series") return all.filter((i) => i.type === "series");
+    return all;
+  }, [sections, view]);
+
+  const dedupedItems = useMemo(() => {
+    const map = new Map();
+    for (const item of visibleItems) {
+      if (item.id && !map.has(item.id)) {
+        map.set(item.id, item);
+      }
+    }
+    return Array.from(map.values());
+  }, [visibleItems]);
+
+  const handleNavigate = useCallback((v) => {
+    setView(v);
+    if (v === "home") {
+      clearSearch();
+    }
+  }, [clearSearch]);
+
   return (
     <main className="app">
-      <header className="topbar">
-        <h1 className="brand">STREAMIX</h1>
-        <SearchBox onSearch={handleSearch} disabled={searchState === "loading"} />
-      </header>
+      <Navbar
+        view={view}
+        onNavigate={handleNavigate}
+        onSearch={handleSearch}
+        searchState={searchState}
+      />
 
-      {searchState !== "idle" ? (
+      {searchState !== "idle" && view === "search" ? (
         <section className="search-results">
           <div className="row-header">
-            <h2>Results for &quot;{searchQuery}&quot;</h2>
+            <h2>Results for "{searchQuery}"</h2>
             <button className="link-btn" onClick={clearSearch}>
               Clear
             </button>
           </div>
-          {searchState === "loading" && <p className="muted">Searching...</p>}
+          {searchState === "loading" && <SkeletonRow count={8} />}
           {searchState === "error" && (
             <p className="err">Search failed. The provider may be unreachable.</p>
           )}
-          {searchState === "done" &&
-            (searchResult && searchResult.count === 0 ? (
-              <p className="muted">No results found.</p>
-            ) : (
-              <Row items={searchResult?.items ?? []} />
-            ))}
+          {searchState === "done" && searchResult?.count === 0 && (
+            <p className="muted">No results found.</p>
+          )}
+          {searchState === "done" && searchResult?.count > 0 && (
+            <Row title={`Found ${searchResult.count} titles`} items={searchResult.items} />
+          )}
         </section>
       ) : (
         <>
-          {loading && <p className="muted">Loading rows from the CineStream provider...</p>}
-          {errors.length > 0 && (
-            <p className="err">Some sections failed to load: {errors.join("; ")}</p>
+          {loading && (
+            <>
+              <SkeletonRow count={6} />
+              <SkeletonRow count={6} />
+              <SkeletonRow count={6} />
+            </>
+          )}
+          {sectionErrors.length > 0 && (
+            <p className="err">Some sections failed to load: {sectionErrors.join("; ")}</p>
           )}
           {!loading && sections.length === 0 && (
             <p className="muted">No sections loaded. Check that the server is running.</p>
           )}
-          {sections.map(({ key, data }) => (
-            <Row key={key} title={data.title} items={data.items} meta={data.ranking} />
-          ))}
+
+          {(view === "home" || view === "movies" || view === "series") && (
+            <>
+              {view === "home" && heroItem && (
+                <Hero item={heroItem} onMoreInfo={openDetail} />
+              )}
+              {view === "home" &&
+                sections.map(({ key, data }) => (
+                  <Row
+                    key={key}
+                    title={data.title}
+                    items={data.items}
+                    meta={data.ranking}
+                    onSelect={openDetail}
+                  />
+                ))}
+              {(view === "movies" || view === "series") && (
+                <Row
+                  title={view === "movies" ? "Movies" : "Series"}
+                  items={dedupedItems}
+                  onSelect={openDetail}
+                />
+              )}
+            </>
+          )}
         </>
       )}
+
+      {modal && <DetailModal modal={modal} onClose={closeModal} />}
     </main>
   );
 }

@@ -5,6 +5,7 @@ import { createProvider } from "./providers/index.js";
 import { createTmdbEnricher } from "./providers/tmdb.js";
 import { homeRouter } from "./routes/home.js";
 import { searchRouter } from "./routes/search.js";
+import { detailRouter } from "./routes/detail.js";
 
 const cache = new TtlCache({ ttlMs: 300000 });
 const provider = createProvider("CineStream", { cache });
@@ -17,13 +18,14 @@ app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
     name: "streamix-server",
-    version: "0.1.0",
+    version: "0.2.0",
     time: new Date().toISOString()
   });
 });
 
 app.use("/api/home", homeRouter({ provider, enricher, cache }));
-app.use("/api", searchRouter({ provider, enricher, cache }));
+app.use("/api/search", searchRouter({ provider, enricher, cache }));
+app.use("/api", detailRouter({ provider, cache }));
 
 app.listen(PORT, () => {
   console.log(`[streamix] server listening on http://localhost:${PORT}`);
