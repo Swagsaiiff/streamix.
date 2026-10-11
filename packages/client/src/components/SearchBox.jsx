@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchSearch } from "../api.js";
 
 export default function SearchBox({ onSearch, disabled }) {
   const [value, setValue] = useState("");

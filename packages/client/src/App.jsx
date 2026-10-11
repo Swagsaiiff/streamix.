@@ -6,9 +6,6 @@ import Row from "./components/Row.jsx";
 import SkeletonRow from "./components/SkeletonRow.jsx";
 import DetailModal from "./components/DetailModal.jsx";
 import Player from "./components/Player.jsx";
-import SearchBox from "./components/SearchBox.jsx";
-
-const VIEWS = ["home", "movies", "series", "search"];
 
 export default function App() {
   const [sections, setSections] = useState([]);
@@ -214,7 +211,14 @@ export default function App() {
         </>
       )}
 
-      {modal && <DetailModal modal={modal} onClose={closeModal} onPlay={openPlayer} />}
+      {modal && (
+        <DetailModal
+          modal={modal}
+          onClose={closeModal}
+          onPlay={openPlayer}
+          suppressEscape={Boolean(player)}
+        />
+      )}
       {player && <Player item={player} onClose={closePlayer} />}
     </main>
   );

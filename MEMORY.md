@@ -17,6 +17,7 @@ Build a responsive Netflix-style movie and series streaming website using real c
 - Phase 2 — Netflix-style responsive UI: homepage rows and a same-page movie/series details modal with seasons and episodes, rendered exclusively from real Phase 1 data.
 - Phase 3 — Playback: FFmpeg → HLS pipeline, hls.js player, audio-track switching, seeking, fullscreen. (complete; provider extractor port remains)
 - Phase 4 — Reliability: provider fallback, caching, Hindi/English provider optimization, responsive polish.
+- Phase 5 — Final polish and production readiness: a11y/responsive fixes, session reaping, hls.js code-splitting, docs. (implemented; see PROGRESS.md)
 - Phase 4 — Reliability: provider fallback, caching, Hindi/English provider optimization, responsive polish.
 
 ## Phase 1 delivery (implemented)
@@ -78,4 +79,4 @@ Flow: provider resolves a real media URL (mkv/mp4/m3u8) plus required headers �
 
 ## Status
 
-Phases 0-4 are implemented and verified (see `PROGRESS.md` for evidence). Real provider playback is still unresolved; the first Phase 5 task is porting and verifying a real provider extractor end-to-end.
+Phases 0-5 are implemented and verified (see `PROGRESS.md` for evidence). Real provider playback is still unresolved and is the only remaining major gap. Production startup and deployment instructions live in `PROGRESS.md`.

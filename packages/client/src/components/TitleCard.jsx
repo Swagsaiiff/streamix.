@@ -1,34 +1,38 @@
 export default function TitleCard({ item, onClick }) {
   const poster = item.enriched?.poster ?? item.poster;
   return (
-    <article className="card" onClick={() => onClick?.(item)}>
-      <div className="card-poster">
-        {poster ? (
+    <button
+      type="button"
+      className="card"
+      onClick={() => onClick?.(item)}
+      aria-label={`${item.title} (${item.type}) details`}
+    >
+      <span className="card-poster">
+        <span className="card-placeholder">{item.title}</span>
+        {poster && (
           <img
             src={poster}
-            alt={item.title}
+            alt=""
             loading="lazy"
             onError={(e) => {
-              e.currentTarget.style.visibility = "hidden";
+              e.currentTarget.style.display = "none";
             }}
           />
-        ) : (
-          <span className="card-placeholder">{item.title}</span>
         )}
-        <div className="card-overlay">
+        <span className="card-overlay">
           <span className="card-title-overlay">{item.title}</span>
           <span className="card-meta-overlay">
             {item.year ? `${item.year} ` : ""}
             {item.rating ? `★ ${item.rating}` : ""}
           </span>
-        </div>
-      </div>
-      <h3 className="card-title">{item.title}</h3>
-      <p className="card-meta">
+        </span>
+      </span>
+      <span className="card-title">{item.title}</span>
+      <span className="card-meta">
         {item.type}
         {item.year ? ` · ${item.year}` : ""}
         {item.rating ? ` · ${item.rating}` : ""}
-      </p>
-    </article>
+      </span>
+    </button>
   );
 }

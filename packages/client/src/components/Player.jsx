@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import Hls from "hls.js";
 import { createStream, cleanupStream } from "../api.js";
+
+function isEditableTarget(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "SELECT" ||
+    tag === "TEXTAREA" ||
+    target.isContentEditable
+  );
+}
 
 export default function Player({ item, onClose }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const hlsRef = useRef(null);
   const sessionRef = useRef(null);
-  const abortRef = useRef(null);
   const [phase, setPhase] = useState("resolving");
   const [error, setError] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -23,14 +32,17 @@ export default function Player({ item, onClose }) {
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    abortRef.current = controller;
 
     async function start() {
       try {
-        const stream = await createStream(item.type, item.id, {
-          signal: controller.signal,
-          lang: preferredLang || undefined
-        });
+        const [stream, hlsModule] = await Promise.all([
+          createStream(item.type, item.id, {
+            signal: controller.signal,
+            lang: preferredLang || undefined
+          }),
+          import("hls.js")
+        ]);
+        const Hls = hlsModule.default;
         if (cancelled) return;
         sessionRef.current = stream.sessionId;
         setSourceNote(stream.note ?? null);
@@ -121,8 +133,12 @@ export default function Player({ item, onClose }) {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
-      if (e.code === "Space") {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (isEditableTarget(e.target)) return;
+      if (e.code === "Space" && e.target instanceof HTMLElement && e.target.tagName !== "BUTTON") {
         e.preventDefault();
         togglePlay();
       }
@@ -191,6 +207,7 @@ export default function Player({ item, onClose }) {
       <select
         value={activeTrack ?? audioTracks[0]?.id ?? ""}
         onChange={(e) => selectAudio(e.target.value)}
+        aria-label="Select audio track"
       >
         {audioTracks.map((track) => (
           <option key={track.id} value={track.id}>
@@ -210,6 +227,7 @@ export default function Player({ item, onClose }) {
       <select
         value={preferredLang}
         onChange={(e) => setLanguagePreference(e.target.value)}
+        aria-label="Preferred audio language"
       >
         <option value="">Default</option>
         {availableLangs.map((lang) => (
@@ -247,12 +265,16 @@ export default function Player({ item, onClose }) {
       </div>
 
       <div className="player-controls">
-        <button onClick={togglePlay}>{playing ? "Pause" : "Play"}</button>
-        <button onClick={() => skip(-10)}>-10s</button>
-        <button onClick={() => skip(10)}>+10s</button>
+        <button onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
+          {playing ? "Pause" : "Play"}
+        </button>
+        <button onClick={() => skip(-10)} aria-label="Seek back 10 seconds">-10s</button>
+        <button onClick={() => skip(10)} aria-label="Seek forward 10 seconds">+10s</button>
         {audioMenu}
         {languageMenu}
-        <button onClick={toggleFullscreen}>{fullscreen ? "Exit Fullscreen" : "Fullscreen"}</button>
+        <button onClick={toggleFullscreen} aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
+          {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+        </button>
       </div>
     </div>
   );

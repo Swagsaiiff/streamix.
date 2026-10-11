@@ -19,7 +19,9 @@ const enricher = createTmdbEnricher({ apiKey: config.tmdbApiKey, cache });
 const streamManager = createStreamManager({
   ffmpegPath: config.ffmpegPath,
   ffprobePath: config.ffprobePath,
-  maxConcurrent: config.maxConcurrentSessions
+  maxConcurrent: config.maxConcurrentSessions,
+  sessionMaxAgeMs: config.sessionMaxAgeMs,
+  reaperIntervalMs: config.sessionReaperIntervalMs
 });
 const resolver = createResolver({ providers, fixturePath: config.fixturePath });
 

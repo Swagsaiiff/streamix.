@@ -104,7 +104,15 @@ export function buildAudioLayout(audios, preferredLanguage = null) {
   return { layout: parts.join(" "), tracks, defaultTrackIndex: defaultIndex };
 }
 
-export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffprobe", maxConcurrent = 2 }) {
+export function createStreamManager({
+  ffmpegPath = "ffmpeg",
+  ffprobePath = "ffprobe",
+  maxConcurrent = 2,
+  sessionMaxAgeMs = 3600000,
+  reaperIntervalMs = 300000
+} = {}) {
+  let reaper = null;
+
   function pump() {
     while (activeTranscodes < maxConcurrent && pendingQueue.length > 0) {
       const job = pendingQueue.shift();
@@ -144,6 +152,24 @@ export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffpr
     activeSessions.delete(sessionId);
   }
 
+  async function cleanupExpiredSessions(now = Date.now()) {
+    const expired = [];
+    for (const [sessionId, session] of activeSessions) {
+      if (now - session.createdAt > sessionMaxAgeMs) {
+        expired.push(sessionId);
+      }
+    }
+    await Promise.allSettled(expired.map((sessionId) => cleanupSession(sessionId)));
+  }
+
+  function ensureReaper() {
+    if (reaper || reaperIntervalMs <= 0) return;
+    reaper = setInterval(() => {
+      cleanupExpiredSessions().catch(() => {});
+    }, reaperIntervalMs);
+    if (typeof reaper.unref === "function") reaper.unref();
+  }
+
   async function createSession(sourceUrl, { timeoutMs = 1800000, preferredLanguage = null } = {}) {
     const sessionId = createHash("sha256").update(`${sourceUrl}:${Date.now()}:${Math.random()}`).digest("hex");
     const sessionDir = join(TEMP_DIR, sessionId);
@@ -161,6 +187,7 @@ export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffpr
       error: null
     };
     activeSessions.set(sessionId, session);
+    ensureReaper();
 
     return enqueue(async () => {
       try {
@@ -265,6 +292,7 @@ export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffpr
     getMasterPlaylist,
     resolveFile,
     cleanupSession,
+    cleanupExpiredSessions,
     getActiveSessionCount: () => activeSessions.size
   };
 }

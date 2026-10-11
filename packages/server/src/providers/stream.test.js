@@ -111,6 +111,18 @@ test("stream sessions are isolated from each other", { timeout: 60000 }, async (
   assert.equal(await manager.getSession(second.sessionId), null);
 });
 
+test("expired sessions are reaped and cleaned up", { timeout: 60000 }, async () => {
+  ensureFixture();
+  await initHlsDir();
+  const manager = createStreamManager({ maxConcurrent: 1, sessionMaxAgeMs: 100 });
+  const session = await manager.createSession(fixturePath);
+  assert.ok(await manager.getSession(session.sessionId));
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  await manager.cleanupExpiredSessions();
+  assert.equal(await manager.getSession(session.sessionId), null);
+  assert.equal(await manager.getActiveSessionCount(), 0);
+});
+
 function activeSessionCount(manager) {
   return manager.getActiveSessionCount ? manager.getActiveSessionCount() : 0;
 }

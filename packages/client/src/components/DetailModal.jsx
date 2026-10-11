@@ -1,18 +1,38 @@
 import { useEffect, useRef, useCallback } from "react";
 
-export default function DetailModal({ modal, onClose, onPlay }) {
+const FOCUSABLE_SELECTOR =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+export default function DetailModal({ modal, onClose, onPlay, suppressEscape = false }) {
   const { item, detail, state } = modal;
   const closeRef = useRef(null);
   const restoreRef = useRef(null);
   const containerRef = useRef(null);
 
   useEffect(() => {
+    const container = containerRef.current;
     restoreRef.current = document.activeElement;
     document.body.style.overflow = "hidden";
-    containerRef.current?.querySelector(".modal-close")?.focus();
+    closeRef.current?.focus();
 
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (suppressEscape) return;
+        e.preventDefault();
+        onClose();
+      }
+      if (e.key !== "Tab" || !container) return;
+      const focusables = Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !container.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => {
@@ -20,7 +40,7 @@ export default function DetailModal({ modal, onClose, onPlay }) {
       document.body.style.overflow = "";
       restoreRef.current?.focus?.();
     };
-  }, [onClose]);
+  }, [onClose, suppressEscape]);
 
   const backdrop = detail?.backdrop ?? item.backdrop ?? detail?.poster ?? item.poster;
   const genres = detail?.genres ?? item.genres;
@@ -39,7 +59,14 @@ export default function DetailModal({ modal, onClose, onPlay }) {
   const seasons = groupedEpisodes();
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div
+      className="modal-overlay"
+      ref={containerRef}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <button
           ref={closeRef}
@@ -60,7 +87,12 @@ export default function DetailModal({ modal, onClose, onPlay }) {
             {detail?.rating ? ` · ${detail.rating}` : item.rating ? ` · ${item.rating}` : ""}
             {genres?.length ? ` · ${genres.join(", ")}` : ""}
           </p>
-          <button className="btn btn-play" disabled={!onPlay} onClick={() => onPlay?.(item)}>
+          <button
+            className="btn btn-play"
+            disabled={!onPlay}
+            onClick={() => onPlay?.(item)}
+            title={onPlay ? "Play" : "Playback is not available for this title"}
+          >
             Play
           </button>
           {state === "loading" && (
