@@ -1,7 +1,10 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env");
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(configDir, "../../..");
+
+const envPath = path.join(repoRoot, ".env");
 
 try {
   process.loadEnvFile(envPath);
@@ -12,5 +15,9 @@ try {
 export const config = {
   port: Number(process.env.PORT) || 4000,
   tmdbApiKey: process.env.TMDB_API_KEY || "",
+  ffmpegPath: process.env.FFMPEG_PATH || "ffmpeg",
+  ffprobePath: process.env.FFPROBE_PATH || "ffprobe",
+  fixturePath: process.env.STREAMIX_FIXTURE || path.join(repoRoot, "temp", "fixtures", "multi-audio.mkv"),
+  maxConcurrentSessions: Number(process.env.MAX_CONCURRENT_SESSIONS) || 2,
   isProduction: process.env.NODE_ENV === "production"
 };

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 
-export default function DetailModal({ modal, onClose }) {
+export default function DetailModal({ modal, onClose, onPlay }) {
   const { item, detail, state } = modal;
   const closeRef = useRef(null);
   const restoreRef = useRef(null);
@@ -60,7 +60,7 @@ export default function DetailModal({ modal, onClose }) {
             {detail?.rating ? ` · ${detail.rating}` : item.rating ? ` · ${item.rating}` : ""}
             {genres?.length ? ` · ${genres.join(", ")}` : ""}
           </p>
-          <button className="btn btn-play" disabled title="Playback arrives in Phase 3">
+          <button className="btn btn-play" disabled={!onPlay} onClick={() => onPlay?.(item)}>
             Play
           </button>
           {state === "loading" && (

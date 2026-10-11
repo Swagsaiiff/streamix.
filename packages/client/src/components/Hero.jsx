@@ -1,4 +1,4 @@
-export default function Hero({ item, onMoreInfo }) {
+export default function Hero({ item, onMoreInfo, onPlay }) {
   if (!item) return null;
   const backdrop = item.backdrop ?? item.poster;
   return (
@@ -15,7 +15,7 @@ export default function Hero({ item, onMoreInfo }) {
         </div>
         {item.overview && <p className="hero-overview">{item.overview}</p>}
         <div className="hero-actions">
-          <button className="btn btn-play" disabled title="Playback arrives in Phase 3">
+          <button className="btn btn-play" disabled={!onPlay} onClick={() => onPlay?.(item)}>
             Play
           </button>
           <button className="btn btn-more" onClick={() => onMoreInfo(item)}>

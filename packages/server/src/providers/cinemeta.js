@@ -78,6 +78,7 @@ export class CineStreamProvider extends BaseProvider {
       supportsHomePage: true,
       supportsSearch: true,
       supportsDetail: true,
+      supportsStreamResolution: false,
       rankingMethod: "CineStream top catalog, ordered by the provider's own popularity metric",
       homeCatalogTypes: ["movie", "series"]
     };

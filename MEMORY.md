@@ -15,7 +15,7 @@ Build a responsive Netflix-style movie and series streaming website using real c
 - Phase 0 — Foundation: documentation, git, minimal React+Vite client and Node+Express server, health-check endpoint, verified dev setup. (complete)
 - Phase 1 — Dynamic content engine: parse the CSX manifest, port real provider logic (search + discovery) from actual extension sources, make real HTTP requests with required headers, optional TMDB metadata enrichment. (current phase)
 - Phase 2 — Netflix-style responsive UI: homepage rows and a same-page movie/series details modal with seasons and episodes, rendered exclusively from real Phase 1 data.
-- Phase 3 — Playback: real provider stream resolution, server-side FFmpeg → HLS, hls.js player with audio-track switching, subtitles, seeking, and fullscreen.
+- Phase 3 — Playback: FFmpeg → HLS pipeline, hls.js player, audio-track switching, seeking, fullscreen. (current phase; provider extractor port remains as Phase 4 provider work)
 - Phase 4 — Reliability: provider fallback, caching, Hindi/English provider optimization, responsive polish.
 
 ## Phase 1 delivery (implemented)
@@ -38,7 +38,16 @@ Build a responsive Netflix-style movie and series streaming website using real c
 - The CineStream extension also registers CineSimkl (needs a SIMKL client ID compiled into the .cs3 — unavailable) and CineTmdb (key-based; superseded by our optional enrichment). Other CSX providers (Bollyflix, MoviesDrive, Moviesmod, VegaMovies) are Phase 4 work.
 - Client: minimal dev view consuming `/api/home/*` and `/api/search` with loading/error/empty states (Phase 2 builds the full UI).
 
-## Playback pipeline (Phase 3 integration plan — documented now, not implemented)
+## Playback pipeline (Phase 3 — implemented against local fixture; provider extractor pending)
+
+Phase 3 status: the pipeline is real and verified end-to-end, but only against a local multi-audio test fixture (`scripts/make-test-fixture.mjs` → `temp/fixtures/multi-audio.mkv`). Provider stream resolution is honestly reported as unimplemented; the resolver returns `local_fixture` and a note. Porting real extractors is the next step.
+
+Implemented surface:
+- `POST /api/stream/:type/:id` → creates an HLS session (probe → FFmpeg → master playlist) and returns `{ sessionId, audioTracks, playlistUrl, sourceType, title, year, note }`
+- `GET /api/stream/:sessionId/master.m3u8`, `GET /api/stream/:sessionId/status`, `GET /api/stream/:sessionId/:file` (strict file-name allowlist), `DELETE /api/stream/:sessionId`
+- FFmpeg HLS with `-var_stream_map` audio groups: `EXT-X-MEDIA:TYPE=AUDIO` per audio track (one `DEFAULT=YES`), one video variant with `AUDIO="group_aud"`; audio track names/languages come from ffprobe tags
+- hls.js 1.7.3 player: play/pause, -10s/+10s, fullscreen, audio menu sourced only from `hls.audioTracks`, back to modal, HLS/session cleanup on close
+- Security: session-id regex, file-name allowlist, abort/timeout on FFmpeg, concurrency cap, no arbitrary URLs (resolver only returns the server-controlled fixture path for now)
 
 Flow: provider resolves a real media URL (mkv/mp4/m3u8) plus required headers → server fetches it and pipes through FFmpeg → FFmpeg emits HLS (segments + master playlist) → server streams it to the client → hls.js plays it.
 
@@ -59,4 +68,4 @@ Flow: provider resolves a real media URL (mkv/mp4/m3u8) plus required headers �
 
 ## Status
 
-Phase 1 is implemented and verified (see `PROGRESS.md` for test evidence). Next: Phase 2 homepage + details modal.
+Phases 0-3 are implemented and verified (see `PROGRESS.md` for test evidence). Phase 3 delivers the FFmpeg/HLS pipeline with multi-audio against a local fixture; the real provider extractor port is the first Phase 4 task.

@@ -5,6 +5,7 @@ import Hero from "./components/Hero.jsx";
 import Row from "./components/Row.jsx";
 import SkeletonRow from "./components/SkeletonRow.jsx";
 import DetailModal from "./components/DetailModal.jsx";
+import Player from "./components/Player.jsx";
 import SearchBox from "./components/SearchBox.jsx";
 
 const VIEWS = ["home", "movies", "series", "search"];
@@ -19,6 +20,7 @@ export default function App() {
   const [searchResult, setSearchResult] = useState(null);
   const [searchState, setSearchState] = useState("idle");
   const [modal, setModal] = useState(null);
+  const [player, setPlayer] = useState(null);
   const detailCacheRef = useRef(new Map());
   const searchControllerRef = useRef(null);
   const detailControllerRef = useRef(null);
@@ -55,7 +57,7 @@ export default function App() {
       const controller = new AbortController();
       searchControllerRef.current = controller;
       try {
-        const result = await fetchSearch(trimmed, controller.signal);
+        const result = await fetchSearch(trimmed, { signal: controller.signal });
         setSearchResult(result);
         setSearchState("done");
       } catch (err) {
@@ -90,7 +92,7 @@ export default function App() {
       detailControllerRef.current = controller;
       setModal({ item, detail: null, state: "loading" });
       try {
-        const data = await fetchDetail(item.type, item.id, controller.signal);
+        const data = await fetchDetail(item.type, item.id, { signal: controller.signal });
         detailCacheRef.current.set(key, data.item);
         setModal({ item, detail: data.item, state: "done" });
       } catch (err) {
@@ -107,6 +109,14 @@ export default function App() {
     }
     setModal(null);
   }, [detailControllerRef]);
+
+  const openPlayer = useCallback((item) => {
+    setPlayer(item);
+  }, []);
+
+  const closePlayer = useCallback(() => {
+    setPlayer(null);
+  }, []);
 
   const visibleItems = useMemo(() => {
     if (view === "home") return [];
@@ -180,7 +190,7 @@ export default function App() {
           {(view === "home" || view === "movies" || view === "series") && (
             <>
               {view === "home" && heroItem && (
-                <Hero item={heroItem} onMoreInfo={openDetail} />
+                <Hero item={heroItem} onMoreInfo={openDetail} onPlay={openPlayer} />
               )}
               {view === "home" &&
                 sections.map(({ key, data }) => (
@@ -204,7 +214,8 @@ export default function App() {
         </>
       )}
 
-      {modal && <DetailModal modal={modal} onClose={closeModal} />}
+      {modal && <DetailModal modal={modal} onClose={closeModal} onPlay={openPlayer} />}
+      {player && <Player item={player} onClose={closePlayer} />}
     </main>
   );
 }
