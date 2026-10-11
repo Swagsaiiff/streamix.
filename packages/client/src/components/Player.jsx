@@ -13,6 +13,10 @@ export default function Player({ item, onClose }) {
   const [playing, setPlaying] = useState(false);
   const [audioTracks, setAudioTracks] = useState([]);
   const [activeTrack, setActiveTrack] = useState(null);
+  const [availableLangs, setAvailableLangs] = useState([]);
+  const [preferredLang, setPreferredLang] = useState(
+    () => localStorage.getItem("streamix.lang") || ""
+  );
   const [fullscreen, setFullscreen] = useState(false);
   const [sourceNote, setSourceNote] = useState(null);
 
@@ -23,7 +27,10 @@ export default function Player({ item, onClose }) {
 
     async function start() {
       try {
-        const stream = await createStream(item.type, item.id, { signal: controller.signal });
+        const stream = await createStream(item.type, item.id, {
+          signal: controller.signal,
+          lang: preferredLang || undefined
+        });
         if (cancelled) return;
         sessionRef.current = stream.sessionId;
         setSourceNote(stream.note ?? null);
@@ -47,7 +54,15 @@ export default function Player({ item, onClose }) {
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (cancelled) return;
-          setAudioTracks(hls.audioTracks ?? []);
+          const tracks = hls.audioTracks ?? [];
+          setAudioTracks(tracks);
+          setAvailableLangs(
+            Array.from(new Set(tracks.map((t) => t.lang).filter(Boolean)))
+          );
+          if (preferredLang) {
+            const match = tracks.find((t) => t.lang === preferredLang);
+            if (match) hls.audioTrack = match.id;
+          }
           setPhase("ready");
           video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
         });
@@ -148,6 +163,18 @@ export default function Player({ item, onClose }) {
     setActiveTrack(Number(id));
   }, []);
 
+  const setLanguagePreference = useCallback((lang) => {
+    setPreferredLang(lang);
+    if (lang) {
+      localStorage.setItem("streamix.lang", lang);
+    } else {
+      localStorage.removeItem("streamix.lang");
+    }
+    const hls = hlsRef.current;
+    const match = hls?.audioTracks?.find((t) => t.lang === lang);
+    if (match) hls.audioTrack = match.id;
+  }, []);
+
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -176,6 +203,23 @@ export default function Player({ item, onClose }) {
   ) : (
     <span className="player-audio muted">No selectable audio tracks</span>
   );
+
+  const languageMenu = availableLangs.length > 0 ? (
+    <label className="player-audio">
+      <span>Lang pref</span>
+      <select
+        value={preferredLang}
+        onChange={(e) => setLanguagePreference(e.target.value)}
+      >
+        <option value="">Default</option>
+        {availableLangs.map((lang) => (
+          <option key={lang} value={lang}>
+            {lang}
+          </option>
+        ))}
+      </select>
+    </label>
+  ) : null;
 
   return (
     <div className="player" ref={containerRef} role="dialog" aria-modal="true" aria-label={`Playing ${item.title}`}>
@@ -207,6 +251,7 @@ export default function Player({ item, onClose }) {
         <button onClick={() => skip(-10)}>-10s</button>
         <button onClick={() => skip(10)}>+10s</button>
         {audioMenu}
+        {languageMenu}
         <button onClick={toggleFullscreen}>{fullscreen ? "Exit Fullscreen" : "Fullscreen"}</button>
       </div>
     </div>

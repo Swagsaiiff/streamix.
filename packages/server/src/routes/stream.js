@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { ProviderError } from "../providers/base.js";
+import { sendError } from "../errors.js";
+import { logger } from "../logger.js";
 
 const SESSION_ID_RE = /^[a-f0-9]{64}$/;
 const FILE_RE = /^[A-Za-z0-9._-]+$/;
@@ -12,38 +13,43 @@ function validFile(value) {
   return typeof value === "string" && value.length <= 80 && FILE_RE.test(value);
 }
 
-export function streamRouter({ provider, cache, streamManager, resolver }) {
+export function streamRouter({ provider, cache, streamManager, resolver, defaultLanguage = null }) {
   const router = Router();
 
   router.post("/stream/:type/:id", async (req, res) => {
     const { type, id } = req.params;
+    const preferredLanguage =
+      req.query.lang ?? req.query.preferredLanguage ?? defaultLanguage ?? null;
 
     try {
-      const stream = await resolver.resolveStream(type, id);
-      const session = await streamManager.createSession(stream.sourceUrl);
+      logger.info("stream.resolve", { type, id, preferredLanguage });
+      const stream = await resolver.resolveStream(type, id, { preferredLanguage });
+      logger.info("stream.source_resolved", {
+        sourceType: stream.sourceType,
+        resolution: stream.resolution.status,
+        provider: stream.provider.name
+      });
+
+      const session = await streamManager.createSession(stream.sourceUrl, {
+        preferredLanguage
+      });
+      logger.info("stream.session_created", { sessionId: session.sessionId, status: session.status });
 
       res.status(201).json({
         sessionId: session.sessionId,
+        provider: stream.provider,
+        resolution: stream.resolution,
+        audioTracks: session.audioTracks,
+        preferredLanguage: session.audioTracks.find((t) => t.default)?.language ?? null,
         title: stream.title,
         year: stream.year,
         mediaType: stream.mediaType,
-        sourceType: stream.sourceType,
         note: stream.note ?? null,
-        audioTracks: session.audioTracks,
         playlistUrl: `/api/stream/${session.sessionId}/master.m3u8`
       });
     } catch (err) {
-      if (err instanceof ProviderError) {
-        const statusByCode = {
-          validation: 400,
-          not_found: 404,
-          timeout: 504,
-          unsupported: 422,
-        };
-        const status = statusByCode[err.code] ?? 502;
-        return res.status(status).json({ error: "provider_error", code: err.code, message: err.message });
-      }
-      return res.status(422).json({ error: "conversion_error", message: err.message });
+      logger.warn("stream.resolve_failed", { type, id, code: err.code ?? "internal" });
+      return sendError(res, err);
     }
   });
 

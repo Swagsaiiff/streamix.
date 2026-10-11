@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ProviderError } from "../providers/base.js";
+import { sendError } from "../errors.js";
 
 const CACHE_TTL_MS = 600000;
 
@@ -42,19 +42,11 @@ export function searchRouter({ provider, enricher, cache }) {
       };
       cache.set(cacheKey, body, CACHE_TTL_MS);
       return res.json(body);
-    } catch (err) {
-      const stale = cache.get(cacheKey);
-      if (stale) return res.json({ ...stale, cached: true, stale: true });
-      if (err instanceof ProviderError) {
-        const status = err.code === "timeout" ? 504 : 502;
-        return res.status(status).json({
-          error: "provider_error",
-          code: err.code,
-          message: `Upstream provider request failed (${err.code}).`
-        });
+      } catch (err) {
+        const stale = cache.get(cacheKey);
+        if (stale) return res.json({ ...stale, cached: true, stale: true });
+        return sendError(res, err);
       }
-      return res.status(500).json({ error: "internal_error", message: "An unexpected error occurred." });
-    }
   });
 
   return router;

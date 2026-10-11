@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createStreamManager, initHlsDir } from "./stream.js";
+import { createStreamManager, initHlsDir, buildAudioLayout } from "./stream.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const fixturePath = resolve(repoRoot, "temp", "fixtures", "multi-audio.mkv");
@@ -58,6 +58,57 @@ test("fails cleanly when the source cannot be opened", { timeout: 60000 }, async
   const manager = createStreamManager({ maxConcurrent: 1 });
   await assert.rejects(() => manager.createSession(resolve(repoRoot, "temp", "does-not-exist.mkv")));
   assert.equal(activeSessionCount(manager), 0);
+});
+
+test("selects the preferred audio track default using real track metadata", { timeout: 60000 }, async () => {
+  ensureFixture();
+  await initHlsDir();
+  const manager = createStreamManager({ maxConcurrent: 1 });
+  const session = await manager.createSession(fixturePath, { preferredLanguage: "es" });
+  const defaults = session.audioTracks.filter((t) => t.default === true);
+  assert.equal(defaults.length, 1);
+  assert.equal(defaults[0].language, "es");
+  await manager.cleanupSession(session.sessionId);
+});
+
+test("buildAudioLayout never labels unknown tracks as a language", () => {
+  const { tracks, defaultTrackIndex } = buildAudioLayout(
+    [{ tags: {} }, { tags: {} }],
+    "hi"
+  );
+  assert.equal(tracks.length, 2);
+  assert.equal(tracks[0].language, null);
+  assert.equal(tracks[1].language, null);
+  assert.equal(tracks[0].name, "Audio 1");
+  assert.equal(defaultTrackIndex, 0);
+  assert.equal(tracks[0].default, true);
+  assert.equal(tracks[1].default, false);
+});
+
+test("buildAudioLayout ignores preferred language when no track matches", () => {
+  const { tracks, defaultTrackIndex } = buildAudioLayout(
+    [{ tags: { language: "en" } }, { tags: { language: "es" } }],
+    "hi"
+  );
+  assert.equal(defaultTrackIndex, 0);
+  assert.equal(tracks[0].default, true);
+});
+
+test("stream sessions are isolated from each other", { timeout: 60000 }, async () => {
+  ensureFixture();
+  await initHlsDir();
+  const manager = createStreamManager({ maxConcurrent: 1 });
+  const first = await manager.createSession(fixturePath);
+  const second = await manager.createSession(fixturePath);
+
+  assert.notEqual(first.sessionId, second.sessionId);
+  assert.notEqual(first.hlsDir, second.hlsDir);
+
+  await manager.cleanupSession(first.sessionId);
+  assert.equal(await manager.getSession(first.sessionId), null);
+  assert.ok(await manager.getSession(second.sessionId));
+  await manager.cleanupSession(second.sessionId);
+  assert.equal(await manager.getSession(second.sessionId), null);
 });
 
 function activeSessionCount(manager) {

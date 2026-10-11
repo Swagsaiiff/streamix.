@@ -8,9 +8,10 @@ export class ProviderError extends Error {
 }
 
 export class BaseProvider {
-  constructor({ name, timeoutMs = 15000 } = {}) {
+  constructor({ name, timeoutMs = 15000, onOutcome } = {}) {
     this.name = name;
     this.timeoutMs = timeoutMs;
+    this.onOutcome = onOutcome;
   }
 
   getUserAgent() {
@@ -41,11 +42,21 @@ export class BaseProvider {
   }
 
   async fetchJson(url, options) {
-    const text = await this.fetchText(url, options);
     try {
-      return JSON.parse(text);
+      const text = await this.fetchText(url, options);
+      const parsed = JSON.parse(text);
+      this.onOutcome?.({ ok: true, operation: "fetch", at: Date.now() });
+      return parsed;
     } catch (err) {
+      const code = err instanceof ProviderError ? err.code : "parse";
+      this.onOutcome?.({ ok: false, operation: "fetch", code, at: Date.now() });
+      if (err instanceof ProviderError) throw err;
       throw new ProviderError("invalid JSON from upstream", "parse", err);
     }
   }
+}
+
+export function isRetryableError(err) {
+  if (!(err instanceof ProviderError)) return false;
+  return err.code === "timeout" || err.code === "network" || err.code === "http";
 }

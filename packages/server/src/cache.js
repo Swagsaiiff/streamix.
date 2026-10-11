@@ -23,4 +23,16 @@ export class TtlCache {
     this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
     return value;
   }
+
+  delete(key) {
+    return this.store.delete(key);
+  }
+
+  clear() {
+    this.store.clear();
+  }
+
+  size() {
+    return this.store.size;
+  }
 }

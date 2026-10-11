@@ -19,5 +19,6 @@ export const config = {
   ffprobePath: process.env.FFPROBE_PATH || "ffprobe",
   fixturePath: process.env.STREAMIX_FIXTURE || path.join(repoRoot, "temp", "fixtures", "multi-audio.mkv"),
   maxConcurrentSessions: Number(process.env.MAX_CONCURRENT_SESSIONS) || 2,
+  preferredAudioLanguage: process.env.PREFERRED_AUDIO_LANGUAGE || "en",
   isProduction: process.env.NODE_ENV === "production"
 };

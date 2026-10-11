@@ -86,18 +86,22 @@ function probeStreams(ffprobePath, sourceUrl) {
   });
 }
 
-function buildAudioLayout(audios) {
+export function buildAudioLayout(audios, preferredLanguage = null) {
   const parts = ["v:0,agroup:aud,name:v0"];
+  const matchedIndex = preferredLanguage
+    ? audios.findIndex((audio) => (audio.tags?.language ?? null) === preferredLanguage)
+    : -1;
+  const defaultIndex = matchedIndex >= 0 ? matchedIndex : 0;
   const tracks = audios.map((audio, i) => {
     const tags = audio.tags ?? {};
     const language = tags.language || null;
     const name = tags.title || tags.language || `Audio ${i + 1}`;
-    let rendition = `a:${i},agroup:aud,name:a${i},default:${i === 0 ? "yes" : "no"}`;
+    let rendition = `a:${i},agroup:aud,name:a${i},default:${i === defaultIndex ? "yes" : "no"}`;
     if (language) rendition += `,language:${language}`;
     parts.push(rendition);
-    return { trackId: i, name, language, default: i === 0, codec: audio.codec_name || null };
+    return { trackId: i, name, language, default: i === defaultIndex, codec: audio.codec_name || null };
   });
-  return { layout: parts.join(" "), tracks };
+  return { layout: parts.join(" "), tracks, defaultTrackIndex: defaultIndex };
 }
 
 export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffprobe", maxConcurrent = 2 }) {
@@ -140,7 +144,7 @@ export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffpr
     activeSessions.delete(sessionId);
   }
 
-  async function createSession(sourceUrl, { timeoutMs = 1800000 } = {}) {
+  async function createSession(sourceUrl, { timeoutMs = 1800000, preferredLanguage = null } = {}) {
     const sessionId = createHash("sha256").update(`${sourceUrl}:${Date.now()}:${Math.random()}`).digest("hex");
     const sessionDir = join(TEMP_DIR, sessionId);
     await mkdir(sessionDir, { recursive: true });
@@ -152,6 +156,7 @@ export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffpr
       proc: null,
       status: "pending",
       createdAt: Date.now(),
+      preferredLanguage,
       audioTracks: [],
       error: null
     };
@@ -164,7 +169,7 @@ export function createStreamManager({ ffmpegPath = "ffmpeg", ffprobePath = "ffpr
         if (videoIndex < 0) throw new Error("no video stream found in source");
         if (audios.length === 0) throw new Error("no audio streams found in source");
 
-        const { layout, tracks } = buildAudioLayout(audios);
+        const { layout, tracks } = buildAudioLayout(audios, preferredLanguage);
         session.audioTracks = tracks;
 
         const args = [

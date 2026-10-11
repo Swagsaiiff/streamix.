@@ -23,8 +23,10 @@ export function fetchDetail(type, id, options = {}) {
   return request(`/api/detail/${type}/${encodeURIComponent(id)}`, options);
 }
 
-export function createStream(type, id, options = {}) {
-  return request(`/api/stream/${type}/${encodeURIComponent(id)}`, { method: "POST", ...options });
+export function createStream(type, id, { lang, ...options } = {}) {
+  const base = `/api/stream/${type}/${encodeURIComponent(id)}`;
+  const path = lang ? `${base}?lang=${encodeURIComponent(lang)}` : base;
+  return request(path, { method: "POST", ...options });
 }
 
 export function cleanupStream(sessionId) {

@@ -1,21 +1,9 @@
 import { Router } from "express";
-import { ProviderError } from "../providers/base.js";
+import { sendError } from "../errors.js";
 
 const ROW_LIMIT = 24;
 const PAGE_COUNT = 3;
 const CACHE_TTL_MS = 300000;
-
-function sendProviderError(res, err) {
-  if (err instanceof ProviderError) {
-    const status = err.code === "timeout" ? 504 : 502;
-    return res.status(status).json({
-      error: "provider_error",
-      code: err.code,
-      message: `Upstream provider request failed (${err.code}).`
-    });
-  }
-  return res.status(500).json({ error: "internal_error", message: "An unexpected error occurred." });
-}
 
 export function homeRouter({ provider, enricher, cache }) {
   const router = Router();
@@ -50,7 +38,7 @@ export function homeRouter({ provider, enricher, cache }) {
       } catch (err) {
         const stale = cache.get(cacheKey);
         if (stale) return res.json({ ...stale, cached: true, stale: true });
-        return sendProviderError(res, err);
+        return sendError(res, err);
       }
     });
   }

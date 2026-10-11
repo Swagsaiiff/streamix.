@@ -31,3 +31,14 @@ test("max entries evicts the oldest entry", () => {
   assert.equal(cache.get("b"), 2);
   assert.equal(cache.get("c"), 3);
 });
+
+test("delete invalidates a key without affecting others", () => {
+  const cache = new TtlCache({ ttlMs: 60000 });
+  cache.set("a", 1);
+  cache.set("b", 2);
+  assert.equal(cache.delete("a"), true);
+  assert.equal(cache.delete("missing"), false);
+  assert.equal(cache.get("a"), undefined);
+  assert.equal(cache.get("b"), 2);
+  assert.equal(cache.size(), 1);
+});

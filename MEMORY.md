@@ -13,9 +13,10 @@ Build a responsive Netflix-style movie and series streaming website using real c
 ## The five phases
 
 - Phase 0 — Foundation: documentation, git, minimal React+Vite client and Node+Express server, health-check endpoint, verified dev setup. (complete)
-- Phase 1 — Dynamic content engine: parse the CSX manifest, port real provider logic (search + discovery) from actual extension sources, make real HTTP requests with required headers, optional TMDB metadata enrichment. (current phase)
+- Phase 1 — Dynamic content engine: parse the CSX manifest, port real provider logic (search + discovery) from actual extension sources, make real HTTP requests with required headers, optional TMDB metadata enrichment. (complete)
 - Phase 2 — Netflix-style responsive UI: homepage rows and a same-page movie/series details modal with seasons and episodes, rendered exclusively from real Phase 1 data.
-- Phase 3 — Playback: FFmpeg → HLS pipeline, hls.js player, audio-track switching, seeking, fullscreen. (current phase; provider extractor port remains as Phase 4 provider work)
+- Phase 3 — Playback: FFmpeg → HLS pipeline, hls.js player, audio-track switching, seeking, fullscreen. (complete; provider extractor port remains)
+- Phase 4 — Reliability: provider fallback, caching, Hindi/English provider optimization, responsive polish.
 - Phase 4 — Reliability: provider fallback, caching, Hindi/English provider optimization, responsive polish.
 
 ## Phase 1 delivery (implemented)
@@ -49,6 +50,15 @@ Implemented surface:
 - hls.js 1.7.3 player: play/pause, -10s/+10s, fullscreen, audio menu sourced only from `hls.audioTracks`, back to modal, HLS/session cleanup on close
 - Security: session-id regex, file-name allowlist, abort/timeout on FFmpeg, concurrency cap, no arbitrary URLs (resolver only returns the server-controlled fixture path for now)
 
+## Phase 4 delivery (implemented)
+
+- Real-provider playback is NOT verified; this remains the project's primary unresolved blocker. `GET /api/providers/status` reports `verifiedRealProviderPlayback: false`; sessions report `resolution.status: fixture_fallback`.
+- Provider registry (`providers/index.js`): typed interface, telemetry per provider (successes/failures/lastSuccessAt/lastErrorCode), `getProviderStatuses`.
+- Resolver (`providers/extractor.js`): bounded retries (default 2) for retryable codes (timeout/network/http); permanent errors (validation/not_found/unsupported) are never retried and stop fallback; next-provider fallback only after retryable exhaustion; in-flight dedupe per `type:id`.
+- Errors (`errors.js`): standardized status mapping and secret-safe client messages across home/search/detail/stream routes. Logging (`logger.js`): structured JSON, no credentials or full source URLs.
+- Language: `PREFERRED_AUDIO_LANGUAGE` (default `en`), `?lang=` override on `POST /api/stream/:type/:id`; default HLS audio track chosen only via matching ffprobe language metadata; unknown tracks never labeled; client localStorage preference + manual track menu.
+- Caching: TTL caches reviewed (5 min catalog/search/detail, 24 h TMDB, 500-entry bound); added `delete`/`clear`; stream results never cached (signed/expiring URLs excluded by design).
+
 Flow: provider resolves a real media URL (mkv/mp4/m3u8) plus required headers → server fetches it and pipes through FFmpeg → FFmpeg emits HLS (segments + master playlist) → server streams it to the client → hls.js plays it.
 
 - Remux first: `-c:v copy -c:a copy` to HLS when codecs are HLS-compatible (e.g. H.264/HEVC video, AAC audio). Transcode only when necessary (e.g. AC3/DTS audio, unsupported video), and never silently — report when transcoding occurs.
@@ -68,4 +78,4 @@ Flow: provider resolves a real media URL (mkv/mp4/m3u8) plus required headers �
 
 ## Status
 
-Phases 0-3 are implemented and verified (see `PROGRESS.md` for test evidence). Phase 3 delivers the FFmpeg/HLS pipeline with multi-audio against a local fixture; the real provider extractor port is the first Phase 4 task.
+Phases 0-4 are implemented and verified (see `PROGRESS.md` for evidence). Real provider playback is still unresolved; the first Phase 5 task is porting and verifying a real provider extractor end-to-end.
