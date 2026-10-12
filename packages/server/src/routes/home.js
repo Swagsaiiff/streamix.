@@ -3,6 +3,8 @@ import { sendError } from "../errors.js";
 
 const ROW_LIMIT = 24;
 const PAGE_COUNT = 3;
+const LATEST_PAGE_COUNT = 5;
+const LATEST_PAGE_SKIP = 147;
 const CACHE_TTL_MS = 300000;
 
 export function homeRouter({ provider, enricher, cache }) {
@@ -34,12 +36,12 @@ export function homeRouter({ provider, enricher, cache }) {
 
         if (enricher.isEnabled) {
           enricher
-            .enrich(items)
+            .enrich(sliced)
             .then(({ items: enrichedItems, matched }) => {
               const refreshed = {
                 ...body,
                 enrichment: { status: "enabled", reason: null, matched },
-                items: enrichedItems.slice(0, ROW_LIMIT)
+                items: enrichedItems
               };
               cache.set(cacheKey, refreshed, CACHE_TTL_MS);
             })
@@ -55,17 +57,17 @@ export function homeRouter({ provider, enricher, cache }) {
     });
   }
 
-  route("trending", "Trending Movies", "", () => provider.getTopMovies(PAGE_COUNT));
+  route("trending", "Top Movies", "", () => provider.getTopMovies(PAGE_COUNT));
   route(
     "latest",
-    "Latest Movies",
-    "; newest-first order: provider exposes no dedicated latest catalog, so the top movie catalog is sorted by release year descending",
+    "Newest Movies",
+    "; provider exposes no dedicated latest catalog: newest-first sort of the top movie catalog beyond the leading titles (skip 147+)",
     async () => {
-      const items = await provider.getTopMovies(PAGE_COUNT);
+      const items = await provider.getTopMovies(LATEST_PAGE_COUNT, LATEST_PAGE_SKIP);
       return items.filter((item) => item.year != null).sort((a, b) => b.year - a.year);
     }
   );
-  route("popular-series", "Popular Series", "", () => provider.getTopSeries(PAGE_COUNT));
+  route("popular-series", "Top Series", "", () => provider.getTopSeries(PAGE_COUNT));
 
   return router;
 }

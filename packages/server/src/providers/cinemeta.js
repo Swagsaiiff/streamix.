@@ -110,16 +110,20 @@ export class CineStreamProvider extends BaseProvider {
     return out;
   }
 
-  async getTopMovies(pages = 3) {
+  async getTopMovies(pages = 3, startSkip = 0) {
     const batches = await Promise.all(
-      Array.from({ length: pages }, (_, i) => this.fetchCatalog("movie", i * CATALOG_PAGE_SIZE))
+      Array.from({ length: pages }, (_, i) =>
+        this.fetchCatalog("movie", startSkip + i * CATALOG_PAGE_SIZE)
+      )
     );
     return this.dedupe(batches.flat());
   }
 
-  async getTopSeries(pages = 3) {
+  async getTopSeries(pages = 3, startSkip = 0) {
     const batches = await Promise.all(
-      Array.from({ length: pages }, (_, i) => this.fetchCatalog("series", i * CATALOG_PAGE_SIZE))
+      Array.from({ length: pages }, (_, i) =>
+        this.fetchCatalog("series", startSkip + i * CATALOG_PAGE_SIZE)
+      )
     );
     return this.dedupe(batches.flat());
   }

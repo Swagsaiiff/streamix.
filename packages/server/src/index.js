@@ -12,10 +12,12 @@ import { createResolver } from "./providers/extractor.js";
 import { createStreamManager } from "./providers/stream.js";
 import { logger } from "./logger.js";
 
-const cache = new TtlCache({ ttlMs: 300000 });
-const providers = listConfiguredProviders({ cache });
+const routeCache = new TtlCache({ ttlMs: 300000, maxEntries: 200 });
+const providerCache = new TtlCache({ ttlMs: 300000, maxEntries: 200 });
+const tmdbCache = new TtlCache({ ttlMs: 86400000, maxEntries: 2000 });
+const providers = listConfiguredProviders({ cache: providerCache });
 const provider = providers[0];
-const enricher = createTmdbEnricher({ apiKey: config.tmdbApiKey, cache });
+const enricher = createTmdbEnricher({ apiKey: config.tmdbApiKey, cache: tmdbCache });
 const streamManager = createStreamManager({
   ffmpegPath: config.ffmpegPath,
   ffprobePath: config.ffprobePath,
@@ -39,9 +41,9 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-app.use("/api/home", homeRouter({ provider, enricher, cache }));
-app.use("/api", searchRouter({ provider, enricher, cache }));
-app.use("/api", detailRouter({ provider, cache }));
+app.use("/api/home", homeRouter({ provider, enricher, cache: routeCache }));
+app.use("/api", searchRouter({ provider, enricher, cache: routeCache }));
+app.use("/api", detailRouter({ provider, cache: routeCache }));
 app.use("/api", streamRouter({ resolver, streamManager, defaultLanguage: config.preferredAudioLanguage }));
 app.use("/api", providersRouter());
 

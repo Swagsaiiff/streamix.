@@ -4,6 +4,43 @@
 
 Post-Phase-5 restoration: CSX catalog/search/poster repair and playback honesty (requested repair work).
 
+## Mandatory bug-fix round (visible failures, browser-verified)
+
+### Reproduced (browser harness: Puppeteer-core + Edge, computed styles + image network checks)
+
+1. Poster boxes had `width: 0` (poster images collapsed); 35/72 home posters dead.
+2. `.card-title` and `.card-meta` computed `display: inline` — titles, media types, years, ratings ran together on one line.
+3. Root cause of 1+2: the Phase-5 TitleCard rewrite used `<span>` containers whose CSS (`width`, `padding-top`, `white-space`, `overflow`, `text-overflow`) only works on block boxes, but the spans were left inline.
+4. Search backend was 404 (`/api/search` mount mismatch) in the prior state; UI results were gated behind a `view === "search"` that nothing ever set.
+5. Catalog responses were blocked on serial, timeout-less TMDB lookups; the shared route/TMDB cache (500 entries) let TMDB inserts evict route responses, causing constant upstream refetch + re-enrich churn ("pending" forever) and slower loads.
+6. Trending and Latest drew from the same catalog slice (19/24 identical titles).
+7. Row headers exposed provider jargon (`ranking` strings) to visitors.
+
+### Fixes implemented and verified in-browser
+
+- `index.css`: `.card-poster`, `.card-title`, `.card-meta` are `display: block`; `.card` gets a fixed `width: 150px` (120px mobile); poster box measures exactly 150x225 (2:3); title and metadata are separate block elements; placeholder stays behind lazy posters.
+- `App.jsx`: search sets `view: "search"`, clear returns home, latest-query guard prevents stale overwrite.
+- `index.js`: dedicated caches — `routeCache` (200), `providerCache` (200), `tmdbCache` (2000, 24h) — no more cross-eviction between routes and TMDB lookups.
+- `home.js`: enrichment runs in background on the displayed 24-item slice only; honest section titles "Top Movies" / "Newest Movies" / "Top Series"; "Newest Movies" sourced from a separate catalog band (skip 147+, 5 pages, newest-first, documented in the API `ranking`).
+- `cinemeta.js`: `getTopMovies/getTopSeries` accept a `startSkip` so sections can draw from different catalog positions.
+- `Row.jsx`/`App.jsx`: `ranking` jargon no longer rendered (still present in API payloads).
+- `index.html`: data-URI favicon removes the stray 404 console error.
+
+### Browser verification (Puppeteer + Edge, real page at localhost:5173)
+
+- Home: 72 cards; computed `posterBox 150x225`; `titleDisplay`/`metaDisplay = block`; `loadedImages 72/72`, `broken 0`; console errors `[]`; row titles "Top Movies | Newest Movies | Top Series".
+- Search "from": 54 cards, first "From Dusk Till Dawn (1996)"; after horizontal scroll `54/54` posters loaded.
+- Search "dune": 23 cards, first "Dune (2021)".
+- Clear: catalog restored (72 cards, 72/72 posters).
+- API: trending 24/24 and latest 24/24 items carry poster fields without TMDB; overlap trending-vs-latest now `0/24`; first catalog response returns in 0.2-0.3 s with `enrichment.status=pending`, then `enabled` on the next fetch; third fetch `0.004 s` (stable cache).
+- Search endpoint timing: cached searches `0.00-0.13 s`; cold 0.4-5.4 s (upstream warm-up); direct upstream probes 71-470 ms.
+- `npm run test` → 34/34 pass; `npm run build` → OK (main 238 kB, lazy hls 575 kB).
+
+### Files changed in this round
+
+- `packages/client/src/index.css`, `packages/client/src/components/Row.jsx`, `packages/client/src/App.jsx`, `packages/client/index.html`
+- `packages/server/src/index.js`, `packages/server/src/routes/home.js`, `packages/server/src/providers/cinemeta.js`
+
 ## Confirmed defects reproduced before repair
 
 1. **Search API was 404.** The search router defines `GET /search` but was mounted at `/api/search`, so the real path was `/api/search/search`; `GET /api/search?q=...` returned `Cannot GET /api/search`.

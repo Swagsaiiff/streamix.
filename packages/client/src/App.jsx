@@ -202,7 +202,6 @@ export default function App() {
                     key={key}
                     title={data.title}
                     items={data.items}
-                    meta={data.ranking}
                     onSelect={openDetail}
                   />
                 ))}
