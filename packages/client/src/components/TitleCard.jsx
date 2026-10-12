@@ -6,6 +6,7 @@ export default function TitleCard({ item, onClick }) {
       className="card"
       onClick={() => onClick?.(item)}
       aria-label={`${item.title} (${item.type}) details`}
+      data-provider={item.provider ?? ""}
     >
       <span className="card-poster">
         <span className="card-placeholder">{item.title}</span>
@@ -33,6 +34,9 @@ export default function TitleCard({ item, onClick }) {
         {item.year ? ` · ${item.year}` : ""}
         {item.rating ? ` · ${item.rating}` : ""}
       </span>
+      {item.provider && item.provider !== "CineStream" && (
+        <span className="card-provider">{item.provider}</span>
+      )}
     </button>
   );
 }

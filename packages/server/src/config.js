@@ -18,6 +18,8 @@ export const config = {
   ffmpegPath: process.env.FFMPEG_PATH || "ffmpeg",
   ffprobePath: process.env.FFPROBE_PATH || "ffprobe",
   fixturePath: process.env.STREAMIX_FIXTURE || path.join(repoRoot, "temp", "fixtures", "multi-audio.mkv"),
+  fixtureFallback: process.env.STREAMIX_FIXTURE_FALLBACK === "true",
+  sessionMaxSeconds: Number(process.env.STREAMIX_SESSION_MAX_SECONDS) || 0,
   maxConcurrentSessions: Number(process.env.MAX_CONCURRENT_SESSIONS) || 2,
   sessionMaxAgeMs: Number(process.env.STREAMIX_SESSION_MAX_AGE_MS) || 3600000,
   sessionReaperIntervalMs: Number(process.env.STREAMIX_REAPER_INTERVAL_MS) || 300000,

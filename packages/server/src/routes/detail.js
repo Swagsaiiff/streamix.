@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { sendError } from "../errors.js";
+import { getProviderByName } from "../providers/index.js";
 
 const CACHE_TTL_MS = 300000;
 
@@ -10,12 +11,12 @@ function validateType(value) {
 function validateId(value) {
   if (value == null) return null;
   const id = String(value).trim();
-  if (id.length < 1 || id.length > 128) return null;
+  if (id.length < 1 || id.length > 300) return null;
   if (/[\u0000-\u001f\u007f]/.test(id)) return null;
   return id;
 }
 
-export function detailRouter({ provider, cache }) {
+export function detailRouter({ provider, cache, providerOptions = {} }) {
   const router = Router();
 
   router.get("/detail/:type/:id", async (req, res) => {
@@ -28,14 +29,17 @@ export function detailRouter({ provider, cache }) {
       return res.status(400).json({ error: "validation_error", message: "Invalid or missing id." });
     }
 
-    const cacheKey = `route:detail:${type}:${id}`;
+    const providerName = req.query.provider ? String(req.query.provider) : provider.getName();
+    const adapter = getProviderByName(providerName, providerOptions) ?? provider;
+
+    const cacheKey = `route:detail:${adapter.getName()}:${type}:${id}`;
     const cached = cache.get(cacheKey);
     if (cached) {
       return res.json({ ...cached, cached: true });
     }
 
     try {
-      const item = await provider.getDetails(type, id);
+      const item = await adapter.getDetails(type, id);
       const body = { item, cached: false, stale: false };
       cache.set(cacheKey, body, CACHE_TTL_MS);
       return res.json(body);

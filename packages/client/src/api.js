@@ -19,13 +19,18 @@ export function fetchSearch(q, options = {}) {
   return request(`/api/search?q=${encodeURIComponent(q)}`, options);
 }
 
-export function fetchDetail(type, id, options = {}) {
-  return request(`/api/detail/${type}/${encodeURIComponent(id)}`, options);
+export function fetchDetail(type, id, { provider, ...options } = {}) {
+  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+  return request(`/api/detail/${type}/${encodeURIComponent(id)}${query}`, options);
 }
 
-export function createStream(type, id, { lang, ...options } = {}) {
+export function createStream(type, id, { lang, provider, ...options } = {}) {
   const base = `/api/stream/${type}/${encodeURIComponent(id)}`;
-  const path = lang ? `${base}?lang=${encodeURIComponent(lang)}` : base;
+  const params = new URLSearchParams();
+  if (lang) params.set("lang", lang);
+  if (provider) params.set("provider", provider);
+  const query = params.toString();
+  const path = query ? `${base}?${query}` : base;
   return request(path, { method: "POST", ...options });
 }
 

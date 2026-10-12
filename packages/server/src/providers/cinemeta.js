@@ -38,6 +38,7 @@ export function normalizeMeta(meta) {
     rating: Number.parseFloat(meta.imdbRating) || null,
     popularity: typeof meta.popularity === "number" ? meta.popularity : null,
     source: "CineStream",
+    provider: "CineStream",
     sourceUrl: `${CINEMETA}/meta/${type}/${meta.id}.json`
   };
 }

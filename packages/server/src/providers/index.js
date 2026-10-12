@@ -1,7 +1,11 @@
 import { CineStreamProvider } from "./cinemeta.js";
+import { VegaMoviesProvider } from "./vegamovies.js";
 import { ProviderError } from "./base.js";
 
-const registry = new Map([["CineStream", CineStreamProvider]]);
+const registry = new Map([
+  ["CineStream", CineStreamProvider],
+  ["VegaMovies", VegaMoviesProvider]
+]);
 const telemetry = new Map();
 
 function recordOutcome(providerName, outcome) {
@@ -37,6 +41,22 @@ export function listConfiguredProviders(options = {}) {
   return Array.from(registry.keys()).map((name) => createProvider(name, options));
 }
 
+export function listProviderNames() {
+  return Array.from(registry.keys());
+}
+
+export function listSearchProviders(options = {}) {
+  return listConfiguredProviders(options).filter(
+    (provider) => provider.getCapabilities().supportsSearch === true
+  );
+}
+
+export function getProviderByName(name, options = {}) {
+  if (!name) return null;
+  if (!registry.has(name)) return null;
+  return createProvider(name, options);
+}
+
 export function getProviderStatuses() {
   return Array.from(registry.keys()).map((name) => {
     const ProviderClass = registry.get(name);
@@ -46,7 +66,7 @@ export function getProviderStatuses() {
     return {
       name,
       configured: true,
-      verifiedRealPlayback: false,
+      verifiedRealPlayback: capabilities.supportsStreamResolution === true,
       capabilities,
       telemetry: t ?? {
         successes: 0,

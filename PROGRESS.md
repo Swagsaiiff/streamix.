@@ -4,6 +4,66 @@
 
 Post-Phase-5 restoration: CSX catalog/search/poster repair and playback honesty (requested repair work).
 
+## Multi-provider search, search-result details, and real playback (verified)
+
+### Diagnosed root causes
+
+1. **Search missed titles** — only one provider (CineStream/cinemeta) was searched; the four other CSX providers were never queried. Fixed by adding a second real provider adapter (VegaMovies) and searching all search-capable providers concurrently.
+2. **Search-result clicks did not open details** — the search-results `Row` in `App.jsx` was rendered without `onSelect`, so cards had no click handler. Also, details always used the default provider, so a VegaMovies result was looked up by the CineStream adapter (`/api/detail/movie/<permalink>` → 502). Fixed with `onSelect` + a `provider` parameter end-to-end.
+3. **Blue screen on Play** — the resolver always fell back to the local test fixture (a solid-blue synthetic clip) and FFmpeg played it, so Play never used a real source. Fixed by implementing a real VegaMovies extractor path and changing the fixture to an explicit, labelled opt-in.
+
+### Provider source inspected and chosen
+
+- Inspected `Bollyflix/BollyflixProvider.kt`, `MoviesDrive/MoviesDriveProvider.kt`, `Moviesmod/MoviesmodProvider.kt`, `VegaMovies/VegaMoviesProvider.kt`, `VegaMovies/Extractors.kt` on CSX `master`.
+- **VegaMovies chosen** because its search is a JSON endpoint (`GET {base}/search.php?q=…&page=1`), portable to Node without JS execution; details resolve via the `imdb_id` on the page + cinemeta merge; and its movie link chain reaches a **direct signed media URL**.
+- **Bollyflix / MoviesDrive / Moviesmod** are HTML-scrape providers guarded by Cloudflare (`cfKiller` interceptor) and need a browser/anti-bot path — not ported this round (documented blocker, not claimed as supported).
+- Base URL is read dynamically from the CSX `Utils/urls.json` (`vegamovies` key) with a known fallback.
+
+### Real playback path (implemented and verified)
+
+`search.php` JSON → detail page (title/poster/`imdb_id`) → `a:has(button.dwd-button)` download pages → host links (`vcloud.beer` etc.) → `atob(atob(...))` token URL → direct signed media URL on Cloudflare R2 (`.mkv`, expiring `X-Amz-Expires`) → validated with ffprobe → existing FFmpeg → HLS pipeline.
+
+Live evidence for "Beast of War (2025)":
+- `POST /api/stream/movie/<permalink>?provider=VegaMovies` → `resolution.status=provider_stream`, `provider=VegaMovies`, note "Resolved from VegaMovies (real provider source)", 2 audio tracks, session ready in ~17 s.
+- Real master playlist: `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="group_aud",NAME="audio_1",DEFAULT=YES,LANGUAGE="hin"` + `audio_2 DEFAULT=NO LANGUAGE="eng"` + a 856x356 H.264 video variant (real Hindi/English dual audio). Segment `seg_v0_000.ts` served 200 `video/mp2t` (163 KB).
+- Browser journey (Puppeteer + Edge): search "war" → 66 cards (CineStream 54, VegaMovies 12); clicked a VegaMovies card → detail request `?provider=VegaMovies` → modal "Beast of War · 2025 · 5.4 · Action, Biography, Drama"; Play → badge "Real source - VegaMovies"; `video.currentTime=3.57s, duration=45.09s, readyState=4, paused=false`; console errors `[]`.
+
+### Fixture policy (no silent substitution)
+
+- `STREAMIX_FIXTURE_FALLBACK` (default **false**): when a title has no supported real extractor, Play returns `422 unsupported` with an actionable message (verified: "No real stream source is available for this title (no supported extractor in: CineStream). VegaMovies search results can play real sources.").
+- Passing `?fixture=1` explicitly opts into the local fixture, which is labelled "TEST MODE" in the API note and as a yellow badge in the player. Real playback shows a green "Real source" badge.
+
+### Additional fixes in this round
+
+- Multi-provider search: bounded per-provider timeout (12 s), `Promise.allSettled`-style isolation (one provider failing never blocks others), cross-provider dedupe by `type+normalizedTitle+year` (remakes and movie/series with the same name are preserved), and per-provider diagnostics returned to the client (`providers:[{provider,count,ms,error}]`) and logged.
+- Provider-aware details: `GET /api/detail/:type/:id?provider=Name`; unknown provider falls back safely; the resolver tries the requested provider first.
+- Resolver fan-out: a non-requested provider rejecting an id no longer aborts resolution; the explicitly requested provider's permanent error does abort.
+- In-flight session dedupe: concurrent identical play requests (e.g. React StrictMode double-mount) share one HLS session — verified: two requests → one `stream_created`.
+- Player releases an aborted mount's session (`cleanupStream`) so no orphan session lingers.
+- FFmpeg now receives source headers when the resolver supplies them; optional `STREAMIX_SESSION_MAX_SECONDS` bounds transcode length (used at 45 s for verification).
+
+### Provider status (honest)
+
+- **CineStream** — catalog/search/detail (metadata). Real stream resolution: not implemented.
+- **VegaMovies** — search/details/real playback: implemented and verified. `verifiedRealPlayback: true` in `/api/providers/status`.
+- **Bollyflix / MoviesDrive / Moviesmod** — not implemented (Cloudflare-gated scraping). Not claimed as supported.
+
+### Specs added/attempted
+
+- `STREAMIX_FIXTURE_FALLBACK`, `STREAMIX_SESSION_MAX_SECONDS` documented in `.env.example`.
+
+### Commands and results
+
+- `npm run test` → 63/63 pass (added: VegaMovies parsers/chain/placeholder-filter, multi-provider merge/dedupe, provider-param routing, fixture policy, fan-out semantics).
+- `npm run build` → Vite 8.3.4 OK (main 238 kB + lazy hls chunk).
+- Live curl checks and the browser journey above.
+
+### Remaining limitations
+
+- Resolution depends on third-party hosts (`vcloud.beer` etc.) and expiring signed URLs; each play re-resolves (by design — no caching of expiring URLs).
+- VegaMovies movie chain verified; **series** episode link extraction is not ported (returns the clear "no playable media" error).
+- `ffprobe` validation is required before a candidate is used, so a slow host can add latency.
+
 ## Mandatory bug-fix round (visible failures, browser-verified)
 
 ### Reproduced (browser harness: Puppeteer-core + Edge, computed styles + image network checks)

@@ -8,6 +8,8 @@ const TEMP_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..",
 const HLS_TIME = 4;
 const MASTER_PLAYLIST = "master.m3u8";
 const SEGMENT_NAME_RE = /^[A-Za-z0-9._-]+$/;
+const DEFAULT_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 const activeSessions = new Map();
 let pendingQueue = [];
@@ -170,7 +172,7 @@ export function createStreamManager({
     if (typeof reaper.unref === "function") reaper.unref();
   }
 
-  async function createSession(sourceUrl, { timeoutMs = 1800000, preferredLanguage = null } = {}) {
+  async function createSession(sourceUrl, { timeoutMs = 1800000, preferredLanguage = null, maxSeconds = 0, headers = {} } = {}) {
     const sessionId = createHash("sha256").update(`${sourceUrl}:${Date.now()}:${Math.random()}`).digest("hex");
     const sessionDir = join(TEMP_DIR, sessionId);
     await mkdir(sessionDir, { recursive: true });
@@ -199,9 +201,16 @@ export function createStreamManager({
         const { layout, tracks } = buildAudioLayout(audios, preferredLanguage);
         session.audioTracks = tracks;
 
+        const headerArgs = [];
+        for (const [key, value] of Object.entries(headers)) {
+          headerArgs.push("-headers", `${key}: ${value}\r\n`);
+        }
+
         const args = [
           "-y", "-hide_banner", "-loglevel", "error",
+          ...(headerArgs.length > 0 ? ["-user_agent", DEFAULT_UA, ...headerArgs] : []),
           "-i", sourceUrl,
+          ...(maxSeconds > 0 ? ["-t", String(maxSeconds)] : []),
           "-map", "0:v:0",
           ...audios.map((_, i) => ["-map", `0:a:${i}`]).flat(),
           "-c:v", "libx264",

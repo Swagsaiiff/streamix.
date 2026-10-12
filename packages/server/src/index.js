@@ -25,7 +25,11 @@ const streamManager = createStreamManager({
   sessionMaxAgeMs: config.sessionMaxAgeMs,
   reaperIntervalMs: config.sessionReaperIntervalMs
 });
-const resolver = createResolver({ providers, fixturePath: config.fixturePath });
+const resolver = createResolver({
+  providers,
+  fixturePath: config.fixturePath,
+  allowFixture: config.fixtureFallback
+});
 
 const app = express();
 const PORT = config.port;
@@ -43,8 +47,16 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/home", homeRouter({ provider, enricher, cache: routeCache }));
 app.use("/api", searchRouter({ provider, enricher, cache: routeCache }));
-app.use("/api", detailRouter({ provider, cache: routeCache }));
-app.use("/api", streamRouter({ resolver, streamManager, defaultLanguage: config.preferredAudioLanguage }));
+app.use("/api", detailRouter({ provider, cache: routeCache, providerOptions: { cache: providerCache } }));
+app.use(
+  "/api",
+  streamRouter({
+    resolver,
+    streamManager,
+    defaultLanguage: config.preferredAudioLanguage,
+    sessionMaxSeconds: config.sessionMaxSeconds
+  })
+);
 app.use("/api", providersRouter());
 
 app.listen(PORT, async () => {

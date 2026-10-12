@@ -9,7 +9,7 @@ function validateType(type) {
 
 function validateId(id) {
   if (id == null || typeof id !== "string") return null;
-  if (id.length < 1 || id.length > 128) return null;
+  if (id.length < 1 || id.length > 300) return null;
   if (/[\u0000-\u001f\u007f]/.test(id)) return null;
   return id;
 }
@@ -21,6 +21,7 @@ function sleep(ms) {
 export function createResolver({
   providers = [],
   fixturePath = null,
+  allowFixture = true,
   retries = DEFAULT_RETRIES
 } = {}) {
   const inFlight = new Map();
@@ -45,7 +46,14 @@ export function createResolver({
     }
   }
 
-  async function doResolve(type, id, { preferredLanguage = null } = {}) {
+  function orderProviders(providerName) {
+    if (!providerName) return providers;
+    const named = providers.filter((p) => p.getName() === providerName);
+    const rest = providers.filter((p) => p.getName() !== providerName);
+    return [...named, ...rest];
+  }
+
+  async function doResolve(type, id, { preferredLanguage = null, provider = null, allowFixture: allowFixtureOverride } = {}) {
     const validType = validateType(type);
     if (!validType) {
       throw new ProviderError("Type must be 'movie' or 'series'", "validation");
@@ -55,31 +63,36 @@ export function createResolver({
       throw new ProviderError("Invalid id parameter", "validation");
     }
 
+    const fixtureAllowed = allowFixtureOverride ?? allowFixture;
     const attemptedProviders = [];
+    const noExtractor = [];
     let lastError = null;
     let resolvedDetail = null;
     let resolvedProviderName = null;
 
-    for (const provider of providers) {
-      attemptedProviders.push(provider.getName());
+    for (const candidate of orderProviders(provider)) {
+      attemptedProviders.push(candidate.getName());
+      const isRequestedProvider = provider != null && candidate.getName() === provider;
       let detail = null;
       try {
-        detail = await getDetailWithRetries(provider, validType, validId);
+        detail = await getDetailWithRetries(candidate, validType, validId);
       } catch (err) {
         if (!isRetryableError(err)) {
-          throw err;
+          if (isRequestedProvider) throw err;
+          lastError = err;
+          continue;
         }
         lastError = err;
         continue;
       }
       resolvedDetail = detail;
-      resolvedProviderName = provider.getName();
+      resolvedProviderName = candidate.getName();
 
-      const capabilities = provider.getCapabilities();
-      if (capabilities.supportsStreamResolution === true && typeof provider.resolveStream === "function") {
-        const source = await provider.resolveStream(detail, { preferredLanguage });
+      const capabilities = candidate.getCapabilities();
+      if (capabilities.supportsStreamResolution === true && typeof candidate.resolveStream === "function") {
+        const source = await candidate.resolveStream(detail, { preferredLanguage });
         return {
-          provider: { name: provider.getName(), resolution: "provider_stream" },
+          provider: { name: candidate.getName(), resolution: "provider_stream" },
           resolution: {
             status: "provider_stream",
             attemptedProviders,
@@ -95,18 +108,19 @@ export function createResolver({
       }
 
       lastError = new ProviderError(
-        `${provider.getName()} stream resolution is not implemented`,
+        `${candidate.getName()} stream resolution is not implemented`,
         "unsupported"
       );
+      noExtractor.push(candidate.getName());
     }
 
-    if (fixturePath) {
+    if (fixtureAllowed && fixturePath) {
       return {
-        provider: { name: resolvedProviderName ?? null, resolution: "local_fixture" },
+        provider: { name: resolvedProviderName ?? attemptedProviders[0] ?? null, resolution: "local_fixture" },
         resolution: {
           status: "fixture_fallback",
           attemptedProviders,
-          note: "No provider stream resolution is available; playing the local test fixture"
+          note: "TEST MODE: no real provider source was used; playing the local test fixture"
         },
         sourceUrl: fixturePath,
         headers: {},
@@ -114,15 +128,21 @@ export function createResolver({
         mediaType: "mkv",
         title: resolvedDetail?.title ?? null,
         year: resolvedDetail?.year ?? null,
-        note: "Provider stream resolution is not implemented yet; playing the local test fixture"
+        note: "TEST MODE: no real provider source was used; playing the local test fixture"
       };
     }
 
+    if (noExtractor.length > 0) {
+      throw new ProviderError(
+        `No real stream source is available for this title (no supported extractor in: ${noExtractor.join(", ")}). VegaMovies search results can play real sources.`,
+        "unsupported"
+      );
+    }
     throw lastError ?? new ProviderError("no compatible provider configured", "unsupported");
   }
 
   function resolveStream(type, id, options) {
-    const key = `${type}:${id}`;
+    const key = `${type}:${id}:${options?.provider ?? ""}`;
     if (inFlight.has(key)) {
       return inFlight.get(key);
     }

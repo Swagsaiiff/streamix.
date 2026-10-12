@@ -4,6 +4,7 @@ import { logger } from "../logger.js";
 
 const SESSION_ID_RE = /^[a-f0-9]{64}$/;
 const FILE_RE = /^[A-Za-z0-9._-]+$/;
+const inflightSessions = new Map();
 
 function validSessionId(value) {
   return typeof value === "string" && SESSION_ID_RE.test(value);
@@ -13,26 +14,60 @@ function validFile(value) {
   return typeof value === "string" && value.length <= 80 && FILE_RE.test(value);
 }
 
-export function streamRouter({ provider, cache, streamManager, resolver, defaultLanguage = null }) {
+export function streamRouter({
+  provider,
+  cache,
+  streamManager,
+  resolver,
+  defaultLanguage = null,
+  sessionMaxSeconds = 0
+}) {
   const router = Router();
 
   router.post("/stream/:type/:id", async (req, res) => {
     const { type, id } = req.params;
     const preferredLanguage =
       req.query.lang ?? req.query.preferredLanguage ?? defaultLanguage ?? null;
+    const providerName = req.query.provider ? String(req.query.provider) : null;
+    const allowFixture =
+      req.query.fixture === "1" || req.query.fixture === "true"
+        ? true
+        : req.query.fixture === "0" || req.query.fixture === "false"
+          ? false
+          : undefined;
 
     try {
-      logger.info("stream.resolve", { type, id, preferredLanguage });
-      const stream = await resolver.resolveStream(type, id, { preferredLanguage });
+      logger.info("stream.resolve", { type, id, preferredLanguage, provider: providerName });
+      const stream = await resolver.resolveStream(type, id, {
+        preferredLanguage,
+        provider: providerName,
+        allowFixture
+      });
       logger.info("stream.source_resolved", {
         sourceType: stream.sourceType,
         resolution: stream.resolution.status,
         provider: stream.provider.name
       });
 
-      const session = await streamManager.createSession(stream.sourceUrl, {
-        preferredLanguage
-      });
+      if (stream.sourceType === "local_fixture") {
+        logger.warn("stream.fixture_fallback", { type, id, provider: providerName });
+      }
+
+      const dedupeKey = `${stream.provider.name}:${type}:${id}:${preferredLanguage ?? ""}:${stream.sourceUrl}`;
+      let sessionPromise = inflightSessions.get(dedupeKey);
+      if (!sessionPromise) {
+        sessionPromise = streamManager
+          .createSession(stream.sourceUrl, {
+            preferredLanguage,
+            maxSeconds: sessionMaxSeconds,
+            headers: stream.headers ?? {}
+          })
+          .finally(() => inflightSessions.delete(dedupeKey));
+        inflightSessions.set(dedupeKey, sessionPromise);
+      } else {
+        logger.info("stream.session_deduped", { type, id, provider: providerName });
+      }
+      const session = await sessionPromise;
       logger.info("stream.session_created", { sessionId: session.sessionId, status: session.status });
 
       res.status(201).json({

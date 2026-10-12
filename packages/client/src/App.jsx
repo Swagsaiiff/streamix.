@@ -83,7 +83,7 @@ export default function App() {
 
   const openDetail = useCallback(
     async (item) => {
-      const key = `${item.type}:${item.id}`;
+      const key = `${item.provider ?? "default"}:${item.type}:${item.id}`;
       const cached = detailCacheRef.current.get(key);
       if (cached) {
         setModal({ item, detail: cached, state: "done" });
@@ -96,7 +96,10 @@ export default function App() {
       detailControllerRef.current = controller;
       setModal({ item, detail: null, state: "loading" });
       try {
-        const data = await fetchDetail(item.type, item.id, { signal: controller.signal });
+        const data = await fetchDetail(item.type, item.id, {
+          signal: controller.signal,
+          provider: item.provider
+        });
         detailCacheRef.current.set(key, data.item);
         setModal({ item, detail: data.item, state: "done" });
       } catch (err) {
@@ -172,7 +175,11 @@ export default function App() {
             <p className="muted">No results found.</p>
           )}
           {searchState === "done" && searchResult?.count > 0 && (
-            <Row title={`Found ${searchResult.count} titles`} items={searchResult.items} />
+            <Row
+              title={`Found ${searchResult.count} titles`}
+              items={searchResult.items}
+              onSelect={openDetail}
+            />
           )}
         </section>
       ) : (

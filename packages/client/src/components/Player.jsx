@@ -28,6 +28,8 @@ export default function Player({ item, onClose }) {
   );
   const [fullscreen, setFullscreen] = useState(false);
   const [sourceNote, setSourceNote] = useState(null);
+  const [sourceStatus, setSourceStatus] = useState(null);
+  const [sourceProvider, setSourceProvider] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,14 +40,22 @@ export default function Player({ item, onClose }) {
         const [stream, hlsModule] = await Promise.all([
           createStream(item.type, item.id, {
             signal: controller.signal,
-            lang: preferredLang || undefined
+            lang: preferredLang || undefined,
+            provider: item.provider
           }),
           import("hls.js")
         ]);
         const Hls = hlsModule.default;
-        if (cancelled) return;
+        if (cancelled) {
+          // The effect was torn down (e.g. StrictMode remount) before we could use this
+          // session; release it so it does not linger on the server.
+          cleanupStream(stream.sessionId);
+          return;
+        }
         sessionRef.current = stream.sessionId;
         setSourceNote(stream.note ?? null);
+        setSourceStatus(stream.resolution?.status ?? null);
+        setSourceProvider(stream.provider?.name ?? null);
 
         const video = videoRef.current;
         if (!video) return;
@@ -246,6 +256,12 @@ export default function Player({ item, onClose }) {
           Back
         </button>
         <span className="player-title">{item.title}</span>
+        {sourceStatus === "fixture_fallback" && (
+          <span className="player-test-badge">TEST MODE - local fixture</span>
+        )}
+        {sourceStatus === "provider_stream" && (
+          <span className="player-live-badge">Real source{sourceProvider ? ` - ${sourceProvider}` : ""}</span>
+        )}
         {sourceNote && <span className="player-source">{sourceNote}</span>}
       </div>
 
