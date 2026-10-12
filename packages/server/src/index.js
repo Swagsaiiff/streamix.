@@ -40,7 +40,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/home", homeRouter({ provider, enricher, cache }));
-app.use("/api/search", searchRouter({ provider, enricher, cache }));
+app.use("/api", searchRouter({ provider, enricher, cache }));
 app.use("/api", detailRouter({ provider, cache }));
 app.use("/api", streamRouter({ resolver, streamManager, defaultLanguage: config.preferredAudioLanguage }));
 app.use("/api", providersRouter());

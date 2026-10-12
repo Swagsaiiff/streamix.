@@ -47,7 +47,6 @@ export default function SearchBox({ onSearch, disabled }) {
         value={value}
         minLength={2}
         onChange={handleChange}
-        disabled={disabled}
         aria-label="Search movies and series"
       />
       {state === "loading" && <span className="search-spinner" aria-hidden="true" />}

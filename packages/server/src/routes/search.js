@@ -27,26 +27,37 @@ export function searchRouter({ provider, enricher, cache }) {
 
     try {
       const items = await provider.search(q);
-      const enrichedResult = await enricher.enrich(items);
       const body = {
         query: q,
         count: items.length,
-        enrichment: {
-          status: enrichedResult.status,
-          reason: enrichedResult.reason ?? null,
-          matched: enrichedResult.matched
-        },
+        enrichment: enricher.isEnabled
+          ? { status: "pending", reason: null, matched: null }
+          : { status: "disabled", reason: "no_tmdb_key", matched: 0 },
         cached: false,
         stale: false,
         items
       };
       cache.set(cacheKey, body, CACHE_TTL_MS);
-      return res.json(body);
-      } catch (err) {
-        const stale = cache.get(cacheKey);
-        if (stale) return res.json({ ...stale, cached: true, stale: true });
-        return sendError(res, err);
+
+      if (enricher.isEnabled) {
+        enricher
+          .enrich(items)
+          .then(({ items: enrichedItems, matched }) => {
+            cache.set(
+              cacheKey,
+              { ...body, enrichment: { status: "enabled", reason: null, matched }, items: enrichedItems },
+              CACHE_TTL_MS
+            );
+          })
+          .catch(() => {});
       }
+
+      return res.json(body);
+    } catch (err) {
+      const stale = cache.get(cacheKey);
+      if (stale) return res.json({ ...stale, cached: true, stale: true });
+      return sendError(res, err);
+    }
   });
 
   return router;

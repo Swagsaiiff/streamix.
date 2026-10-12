@@ -1,4 +1,6 @@
 const TMDB_API = "https://api.themoviedb.org/3";
+const SEARCH_TIMEOUT_MS = 4000;
+const ENRICH_CONCURRENCY = 4;
 
 function normalizeYear(value) {
   if (value == null) return null;
@@ -12,15 +14,37 @@ export function matchesYear(a, b, tolerance = 1) {
   return Math.abs(a - b) <= tolerance;
 }
 
+export async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 export function createTmdbEnricher({ apiKey, cache }) {
   const enabled = Boolean(apiKey);
 
   async function search(type, query, year) {
-    const url = `${TMDB_API}/search/${type}?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US${year ? `&year=${year}` : ""}`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.results ?? [];
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+    try {
+      const url = `${TMDB_API}/search/${type}?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US${year ? `&year=${year}` : ""}`;
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.results ?? [];
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async function enrichItem(item) {
@@ -55,17 +79,15 @@ export function createTmdbEnricher({ apiKey, cache }) {
       return { items, status: "disabled", reason: "no_tmdb_key", matched: 0 };
     }
     let matched = 0;
-    const out = [];
-    for (const item of items) {
+    const enrichedItems = await mapWithConcurrency(items, ENRICH_CONCURRENCY, async (item) => {
       const enriched = await enrichItem(item);
       if (enriched) {
         matched += 1;
-        out.push({ ...item, enriched });
-      } else {
-        out.push(item);
+        return { ...item, enriched };
       }
-    }
-    return { items: out, status: "enabled", matched };
+      return item;
+    });
+    return { items: enrichedItems, status: "enabled", reason: null, matched };
   }
 
   return { enrich, isEnabled: enabled };

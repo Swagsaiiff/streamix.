@@ -21,6 +21,7 @@ export default function App() {
   const detailCacheRef = useRef(new Map());
   const searchControllerRef = useRef(null);
   const detailControllerRef = useRef(null);
+  const latestQueryRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +48,9 @@ export default function App() {
       const trimmed = q.trim();
       if (trimmed.length < 2) return;
       setSearchQuery(trimmed);
+      setView("search");
       setSearchState("loading");
+      latestQueryRef.current = trimmed;
       if (searchControllerRef.current) {
         searchControllerRef.current.abort();
       }
@@ -55,10 +58,12 @@ export default function App() {
       searchControllerRef.current = controller;
       try {
         const result = await fetchSearch(trimmed, { signal: controller.signal });
+        if (latestQueryRef.current !== trimmed) return;
         setSearchResult(result);
         setSearchState("done");
       } catch (err) {
         if (err.name === "AbortError") return;
+        if (latestQueryRef.current !== trimmed) return;
         setSearchState("error");
       }
     },
@@ -69,9 +74,11 @@ export default function App() {
     if (searchControllerRef.current) {
       searchControllerRef.current.abort();
     }
+    latestQueryRef.current = null;
     setSearchQuery("");
     setSearchResult(null);
     setSearchState("idle");
+    setView("home");
   }, []);
 
   const openDetail = useCallback(

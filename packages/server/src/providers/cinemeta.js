@@ -8,7 +8,7 @@ const CATALOG_PAGE_SIZE = 49;
 
 function getPosterUrl(url) {
   if (!url) return null;
-  if (url.includes("metahub.space") || url.includes("kitsu.")) return IMAGE_PROXY + url;
+  if (url.includes("kitsu.")) return IMAGE_PROXY + url;
   return url;
 }
 

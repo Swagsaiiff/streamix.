@@ -17,23 +17,35 @@ export function homeRouter({ provider, enricher, cache }) {
 
       try {
         const items = await fetchItems();
-        const enrichedResult = await enricher.enrich(items);
         const sliced = items.slice(0, ROW_LIMIT);
         const body = {
           key,
           title,
           ranking: `${ranking}${rankingNote}`,
-          enrichment: {
-            status: enrichedResult.status,
-            reason: enrichedResult.reason ?? null,
-            matched: enrichedResult.matched
-          },
+          enrichment: enricher.isEnabled
+            ? { status: "pending", reason: null, matched: null }
+            : { status: "disabled", reason: "no_tmdb_key", matched: 0 },
           count: sliced.length,
           cached: false,
           stale: false,
           items: sliced
         };
         cache.set(cacheKey, body, CACHE_TTL_MS);
+
+        if (enricher.isEnabled) {
+          enricher
+            .enrich(items)
+            .then(({ items: enrichedItems, matched }) => {
+              const refreshed = {
+                ...body,
+                enrichment: { status: "enabled", reason: null, matched },
+                items: enrichedItems.slice(0, ROW_LIMIT)
+              };
+              cache.set(cacheKey, refreshed, CACHE_TTL_MS);
+            })
+            .catch(() => {});
+        }
+
         return res.json(body);
       } catch (err) {
         const stale = cache.get(cacheKey);
