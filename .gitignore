@@ -2,6 +2,8 @@ node_modules/
 dist/
 temp/
 .env
-.env.local
+.env.*
+!.env.example
 *.log
 .DS_Store
+.kilo/
